@@ -2,7 +2,7 @@ import json
 import os 
 import sqlite3
 
-from flask import Flask, g, jsonify, request 
+from flask import Flask, g, jsonify, request # type: ignore
 
 BASE_DIR = os.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
