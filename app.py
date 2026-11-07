@@ -9,10 +9,6 @@ DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-@app.get("/")
-def index():
-    return app.send_static_file("index.html")
-
 Priorites = ("low", "medium", "high")
 Themes = ("light", "dark", "ocean", "forest")
 Tiles = ("tasks", "nostes", "pomordo")
@@ -24,3 +20,17 @@ Default_Settings = {
     "pomodoro_work": 25,   
     "pomodoro_break": 5,   
 }
+
+def error(message, statues=400):
+    return jsonify({"error": message}), status
+
+def clean_text(value, max_len) :
+    """Zwraca przyciety tekst lub None, jesli to nie string."""
+    if not isinstance(value, str):
+        return None
+    return value.strip() [:max_len]
+                   
+
+@app.get("/")
+def index():
+    return app.send_static_file("index.html")
