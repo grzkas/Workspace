@@ -12,3 +12,17 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 @app.get("/")
 def index():
     return app.send_static_file("index.html")
+
+#Domyślne ustawienia 
+
+Priorites = ("low", "medium", "high")
+Themes = ("light", "dark", "ocean", "forest")
+Tiles = ("tasks", "nostes", "pomordo")
+
+Default_Settings = {
+    "theme": "light",
+    "layout": list(Tiles), # kolejnosc kafelkow
+    "hidden": [],          # ukryte kafelki 
+    "pomodoro_work": 25,   # minuty
+    "pomodoro_break": 5,   # minuty
+}
