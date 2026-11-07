@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+dashboard.db
+.env
+.DS_Store
