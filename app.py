@@ -4,10 +4,10 @@ import sqlite3
 
 from flask import Flask, g, jsonify, request # type: ignore
 
-BASE_DIR = os.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
 
-app = Flask(name, static_folder="static", static_url_path="/static")
+app = Flask(os.name, static_folder="static", static_url_path="/static")
 
 Priorites = ("low", "medium", "high")
 Themes = ("light", "dark", "ocean", "forest")
