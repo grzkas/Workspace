@@ -4,7 +4,7 @@ import sqlite3
 
 from flask import Flask, g, jsonify, request # type: ignore
 
-BASE_DIR = os.dirname(os.path.abspath(file))
+BASE_DIR = os.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
 
 app = Flask(name, static_folder="static", static_url_path="/static")
