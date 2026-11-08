@@ -98,3 +98,75 @@ body {
 }
  
 
+/*Formularze i przyciski*/
+.row {
+  display: flex;
+  gap: 8px;
+}
+ 
+.row.center {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+ 
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  font-size: 15px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+ 
+input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+ 
+textarea {
+  width: 100%;
+}
+ 
+button {
+  font-size: 15px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+ 
+button:hover {
+  opacity: 0.85;
+}
+ 
+button.secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+ 
+button.danger {
+  background: transparent;
+  color: var(--high);
+  border: 1px solid var(--high);
+}
+ 
+button.icon {
+  background: transparent;
+  color: var(--muted);
+  padding: 2px 6px;
+}
+ 
+.muted {
+  color: var(--muted);
+}
+ 
+.small {
+  font-size: 13px;
+}
+ 
