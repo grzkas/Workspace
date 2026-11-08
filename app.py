@@ -21,6 +21,56 @@ Default_Settings = {
     "pomodoro_break": 5,
 }
 
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS tasks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT    NOT NULL,
+    priority    TEXT    NOT NULL DEFAULT 'medium',
+    done        INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL DEFAULT (datatime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT    NOT NULL 'Nowa notatka',
+    content     INTEGER NOT NULL DEFAULT '',
+    updated_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    duration_min     INTEGER NOT NULL,
+    completed_at     TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key     TEXT PRIMARY KEY,
+    value   TEXT NOT NULL     
+);
+"""
+
+def get_db():
+    if "db" not in g:
+        g.db = sqlite3.connect(DB_PATH)
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+@app.teardown_appcontext
+def close_db(_exc):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+def init_db():
+    db= sqlite3.connect(DB_PATH)
+    db.executescript(SCHEMA)
+    for key, value in DEFAULT_SETTINGS.items():
+        db.execute(
+            (key, json.dumps(value)),
+        )
+    db.commit()
+    db.close()
+
 def error(message, statues=400):
     return jsonify({"error": message}), status
 
@@ -34,3 +84,8 @@ def clean_text(value, max_len) :
 @app.get("/")
 def index():
     return app.send_static_file("index.html")
+
+init_db()
+
+if __name__ == "__main__":
+    app.run(debug=True)
