@@ -31,7 +31,7 @@ header class="topbar">
 
   <main id="grid" class="grid">
 
-    /* Kafel zadania*/
+    /* Kafelek zadania*/
     <section class="tile" data-tile="tasks">
       <div class="tile-head">
         <span class="drag-handle" title="Przeciągnij, aby zmienić kolejność" aria-label="Uchwyt przeciągania">⠿</span>
@@ -52,6 +52,58 @@ header class="topbar">
       <ul id="task-list" class="task-list"></ul>
       <p id="tasks-empty" class="muted" hidden>Brak zadań. Dodaj pierwsze!</p>
     </section>
+
+    /*kafelek notatki*/
+    <section class="tile" data-tile="notes">
+      <div class="tile-head">
+        <span class="drag-handle" title="Przeciągnij, aby zmienić kolejność" aria-label="Uchwyt przeciągania">⠿</span>
+        <h2>Szybki notatnik</h2>
+        <span id="note-status" class="muted small">—</span>
+      </div>
+
+      <div class="row">
+        <select id="note-select" aria-label="Wybierz notatkę"></select>
+        <button id="note-new" type="button">Nowa</button>
+        <button id="note-delete" type="button" class="danger">Usuń</button>
+      </div>
+
+      <input id="note-title" type="text" placeholder="Tytuł notatki" maxlength="100">
+      <textarea id="note-content" rows="10" placeholder="Pisz tutaj – zapisuje się automatycznie…"></textarea>
+    </section>
+
+    /*kafelek pomodoro*/
+    <section class="tile" data-tile="pomodoro">
+      <div class="tile-head">
+        <span class="drag-handle" title="Przeciągnij, aby zmienić kolejność" aria-label="Uchwyt przeciągania">⠿</span>
+        <h2>Timer Pomodoro</h2>
+        <span id="pomo-mode" class="badge">Praca</span>
+      </div>
+
+      <div id="pomo-time" class="pomo-time" role="timer" aria-live="off">25:00</div>
+
+      <div class="row center">
+        <button id="pomo-start" type="button">Start</button>
+        <button id="pomo-reset" type="button" class="secondary">Reset</button>
+        <button id="pomo-skip" type="button" class="secondary">Pomiń</button>
+      </div>
+
+      <div class="row center durations">
+        <label>Praca (min)
+          <input id="pomo-work" type="number" min="1" max="120" value="25">
+        </label>
+        <label>Przerwa (min)
+          <input id="pomo-break" type="number" min="1" max="120" value="5">
+        </label>
+      </div>
+
+      <div class="stats">
+        <div><strong id="pomo-today">0</strong><span>dziś</span></div>
+        <div><strong id="pomo-total">0</strong><span>łącznie</span></div>
+        <div><strong id="pomo-minutes">0</strong><span>minut</span></div>
+      </div>
+    </section>
+
+  </main>
     
      <script src="/static/app.js"></script>
 </body>
