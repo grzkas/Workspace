@@ -3,22 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Personal Dashboard</title>
+  <title>Workspace</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+header class="topbar">
+    <h1>Workspace</h1>
 
-     <main id="grid" class="grid">
+    <div class="controls">
+      <fieldset class="tile-toggles" aria-label="Widoczność kafelków">
+        <label><input type="checkbox" data-toggle="tasks"> Zadania</label>
+        <label><input type="checkbox" data-toggle="notes"> Notatki</label>
+        <label><input type="checkbox" data-toggle="pomodoro"> Pomodoro</label>
+      </fieldset>
 
+      <label class="theme-picker">
+        Motyw
+        <select id="theme-select">
+          <option value="light">Jasny</option>
+          <option value="dark">Ciemny</option>
+          <option value="ocean">Ocean</option>
+          <option value="forest">Las</option>
+        </select>
+      </label>
+    </div>
+  </header>
 
+  <main id="grid" class="grid">
 
+    /* Kafel zadania*/
+    <section class="tile" data-tile="tasks">
+      <div class="tile-head">
+        <span class="drag-handle" title="Przeciągnij, aby zmienić kolejność" aria-label="Uchwyt przeciągania">⠿</span>
+        <h2>Zadania</h2>
+        <span id="tasks-count" class="badge">0</span>
+      </div>
 
+      <form id="task-form" class="row">
+        <input id="task-title" type="text" placeholder="Nowe zadanie…" maxlength="200" required>
+        <select id="task-priority" aria-label="Priorytet">
+          <option value="low">Niski</option>
+          <option value="medium" selected>Średni</option>
+          <option value="high">Wysoki</option>
+        </select>
+        <button type="submit">Dodaj</button>
+      </form>
 
-
-
-
-
-     </main>
+      <ul id="task-list" class="task-list"></ul>
+      <p id="tasks-empty" class="muted" hidden>Brak zadań. Dodaj pierwsze!</p>
+    </section>
+    
      <script src="/static/app.js"></script>
 </body>
 </html>

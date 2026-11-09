@@ -15,12 +15,16 @@
 
 [data-theme="dark"] {
   --bg: #12141a;
-
-
-
-
-
-
+  --surface: #1c1f29;
+  --text: #e8eaf0;
+  --muted: #9aa1b2;
+  --border: #2d3140;
+  --accent: #818cf8;
+  --accent-text: #11131a;
+  --danger: #f87171;
+  --high: #f87171;
+  --medium: #fbbf24;
+  --low: #4ade80;
 }
 
 * { box-sizing: border-box; }
