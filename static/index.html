@@ -102,11 +102,61 @@ header class="topbar">
         <div><strong id="pomo-minutes">0</strong><span>minut</span></div>
       </div>
     </section>
+  
+     <!---- kafelek tablicy -->
+    <section class="tile" data-tile="board">
+      <div class="tile-head">
+        <span class="drag-handle" title="Przeciągnij, aby zmienić kolejność" aria-label="Uchwyt przeciągania">⠿</span>
+        <h2>Tablica</h2>
+        <span id="board-status" class="muted small">—</span>
+        <span id="board-count" class="badge" title="Liczba elementów">0</span>
+      </div>
+
+      <div class="board-toolbar" role="toolbar" aria-label="Narzędzia tablicy">
+        <div class="tool-group">
+          <button type="button" class="tool secondary active" data-tool="select" title="Zaznacz i przesuwaj (V)">Zaznacz</button>
+          <button type="button" class="tool secondary" data-tool="sticky" title="Karteczka (N)">Karteczka</button>
+          <button type="button" class="tool secondary" data-tool="text" title="Tekst (T)">Tekst</button>
+          <button type="button" class="tool secondary" data-tool="rect" title="Prostokąt (R)">Prostokąt</button>
+          <button type="button" class="tool secondary" data-tool="ellipse" title="Elipsa (E)">Elipsa</button>
+          <button type="button" class="tool secondary" data-tool="connect" title="Połączenie – strzałka między elementami (C)">Połączenie</button>
+        </div>
+
+        <div class="tool-group" role="group" aria-label="Kolor">
+          <button type="button" class="swatch active" data-color="yellow" title="Żółty" aria-label="Żółty"></button>
+          <button type="button" class="swatch" data-color="orange" title="Pomarańczowy" aria-label="Pomarańczowy"></button>
+          <button type="button" class="swatch" data-color="pink" title="Różowy" aria-label="Różowy"></button>
+          <button type="button" class="swatch" data-color="purple" title="Fioletowy" aria-label="Fioletowy"></button>
+          <button type="button" class="swatch" data-color="blue" title="Niebieski" aria-label="Niebieski"></button>
+          <button type="button" class="swatch" data-color="green" title="Zielony" aria-label="Zielony"></button>
+        </div>
+
+        <div class="tool-group">
+          <button type="button" id="board-zoom-out" class="secondary" title="Oddal" aria-label="Oddal">−</button>
+          <span id="board-zoom-label" class="muted small zoom-label">100%</span>
+          <button type="button" id="board-zoom-in" class="secondary" title="Przybliż" aria-label="Przybliż">+</button>
+          <button type="button" id="board-fit" class="secondary" title="Dopasuj widok do zawartości">Dopasuj</button>
+        </div>
+
+        <div class="tool-group">
+          <button type="button" id="board-delete" class="danger" disabled title="Usuń zaznaczony element (Delete)">Usuń zaznaczone</button>
+          <button type="button" id="board-clear" class="danger" title="Usuń wszystko z tablicy">Wyczyść</button>
+        </div>
+      </div>
+
+      <div id="board-viewport" class="board-viewport" tabindex="0" data-tool="select">
+        <div id="board-world" class="board-world">
+          <svg id="board-links" class="board-links" aria-hidden="true"></svg>
+        </div>
+        <p id="board-empty" class="board-empty muted" hidden>
+          Tablica jest pusta.<br>Wybierz narzędzie (np. „Karteczka”) i kliknij na tablicy.
+        </p>
+        <p id="board-hint" class="board-hint muted small"></p>
+      </div>
+    </section>
 
   </main>
-    
-     <script src="/static/app.js"></script>
+
+  <script src="/static/app.js"></script>
 </body>
 </html>
-
-
