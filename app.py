@@ -85,6 +85,99 @@ def clean_text(value, max_len) :
 def index():
     return app.send_static_file("index.html")
 
+def task_to_dict(row):
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "priority": row["priority"],
+        "done": bool(row["done"]),
+        "created_at": row["created_at"],
+    }
+
+
+@app.get("/api/tasks")
+def list_tasks():
+    """Lista zadan. Opcjonalnie ?status=active|done."""
+    status = request.args.get("status")
+    query = "SELECT * FROM tasks"
+    if status == "active":
+        query += " WHERE done = 0"
+    elif status == "done":
+        query += " WHERE done = 1"
+    # niewykonane na gorze, potem wg priorytetu (high -> low), potem najnowsze
+    query += (
+        " ORDER BY done ASC,"
+        " CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,"
+        " id DESC"
+    )
+    rows = get_db().execute(query).fetchall()
+    return jsonify([task_to_dict(r) for r in rows])
+
+
+@app.post("/api/tasks")
+def create_task():
+    data = request.get_json(silent=True) or {}
+    title = clean_text(data.get("title"), 200)
+    priority = data.get("priority", "medium")
+    if not title:
+        return error("Pole 'title' jest wymagane.")
+    if priority not in PRIORITIES:
+        return error("Priorytet musi byc jednym z: low, medium, high.")
+
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO tasks (title, priority) VALUES (?, ?)", (title, priority)
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return jsonify(task_to_dict(row)), 201
+
+
+@app.put("/api/tasks/<int:task_id>")
+def update_task(task_id):
+    """Czesciowa aktualizacja: title, priority, done."""
+    db = get_db()
+    row = db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is None:
+        return error("Nie znaleziono zadania.", 404)
+
+    data = request.get_json(silent=True) or {}
+    title = row["title"]
+    priority = row["priority"]
+    done = row["done"]
+
+    if "title" in data:
+        title = clean_text(data["title"], 200)
+        if not title:
+            return error("Tytul nie moze byc pusty.")
+    if "priority" in data:
+        if data["priority"] not in PRIORITIES:
+            return error("Niepoprawny priorytet.")
+        priority = data["priority"]
+    if "done" in data:
+        if not isinstance(data["done"], bool):
+            return error("Pole 'done' musi byc typu boolean.")
+        done = int(data["done"])
+
+    db.execute(
+        "UPDATE tasks SET title = ?, priority = ?, done = ? WHERE id = ?",
+        (title, priority, done, task_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return jsonify(task_to_dict(row))
+
+
+@app.delete("/api/tasks/<int:task_id>")
+def delete_task(task_id):
+    db = get_db()
+    cur = db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    db.commit()
+    if cur.rowcount == 0:
+        return error("Nie znaleziono zadania.", 404)
+    return "", 204
+
+
 #AI
 if __name__ == "__main__":
     app.run(debug=True)
