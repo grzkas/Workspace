@@ -217,6 +217,40 @@ button.icon {
 .small {
   font-size: 13px;
 }
+/* Zadania */
+.task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.task {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+.task.p-high { border-left-color: var(--high); }
+.task.p-medium { border-left-color: var(--medium); }
+.task.p-low { border-left-color: var(--low); }
+.task .title { flex: 1; word-break: break-word; }
+.task.done .title { text-decoration: line-through; color: var(--muted); }
+.task input[type="text"] { padding: 0.25rem 0.4rem; }
+.task select { padding: 0.2rem 0.3rem; font-size: 0.8rem; }
+
+/*Pomodoro*/
+.pomo-time {
+  font-size: 4rem;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+.durations label { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--muted); gap: 0.2rem; }
+.durations input { width: 6rem; }
+.stats { display: flex; justify-content: space-around; border-top: 1px solid var(--border); padding-top: 0.8rem; }
+.stats div { display: flex; flex-direction: column; align-items: center; }
+.stats strong { font-size: 1.4rem; }
+.stats span { font-size: 0.75rem; color: var(--muted); }
  
 /*Tablica*/
 :root {
