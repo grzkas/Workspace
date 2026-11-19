@@ -64,3 +64,51 @@ document.querySelectorAll("[data-toggle]").forEach((box) => {
     } catch (err) { showError(err); }
   });
 });
+
+let draggedTile = null;
+
+grid.querySelectorAll(".tile").forEach((tile) => {
+  const handle = tile.querySelector(".drag-handle");
+
+  handle.addEventListener("mousedown", () => { tile.draggable = true; });
+  handle.addEventListener("mouseup", () => { tile.draggable = false; });
+
+  tile.addEventListener("dragstart", (e) => {
+    draggedTile = tile;
+    tile.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", tile.dataset.tile); // wymagane przez Firefox
+  });
+
+  tile.addEventListener("dragover", (e) => {
+    if (!draggedTile || draggedTile === tile) return;
+    e.preventDefault(); // pozwala upuscic element
+    tile.classList.add("drag-over");
+  });
+
+  tile.addEventListener("dragleave", () => tile.classList.remove("drag-over"));
+
+  tile.addEventListener("drop", (e) => {
+    e.preventDefault();
+    tile.classList.remove("drag-over");
+    if (!draggedTile || draggedTile === tile) return;
+
+    const tiles = [...grid.children];
+    if (tiles.indexOf(draggedTile) < tiles.indexOf(tile)) {
+      tile.after(draggedTile);   // przeciagamy "w przod" -> wstaw za celem
+    } else {
+      tile.before(draggedTile);  // przeciagamy "w tyl" -> wstaw przed celem
+    }
+  });
+
+  tile.addEventListener("dragend", async () => {
+    tile.draggable = false;
+    tile.classList.remove("dragging");
+    grid.querySelectorAll(".drag-over").forEach((t) => t.classList.remove("drag-over"));
+    draggedTile = null;
+
+    const layout = [...grid.children].map((t) => t.dataset.tile);
+    try { await saveSettings({ layout }); } catch (err) { showError(err); }
+  });
+});
+
