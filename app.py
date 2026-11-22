@@ -266,6 +266,74 @@ def delete_task(task_id):
         return error("Nie znaleziono zadania.", 404)
     return "", 204
 
+def note_to_dict(row):
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "content": row["content"],
+        "updated_at": row["updated_at"],
+    }
+
+
+@app.get("/api/notes")
+def list_notes():
+    rows = get_db().execute("SELECT * FROM notes ORDER BY updated_at DESC, id DESC").fetchall()
+    return jsonify([note_to_dict(r) for r in rows])
+
+
+@app.post("/api/notes")
+def create_note():
+    data = request.get_json(silent=True) or {}
+    title = clean_text(data.get("title", "Nowa notatka"), 100) or "Nowa notatka"
+    content = data.get("content", "")
+    if not isinstance(content, str):
+        return error("Pole 'content' musi byc tekstem.")
+
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO notes (title, content) VALUES (?, ?)", (title, content[:20000])
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM notes WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return jsonify(note_to_dict(row)), 201
+
+
+@app.put("/api/notes/<int:note_id>")
+def update_note(note_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+    if row is None:
+        return error("Nie znaleziono notatki.", 404)
+
+    data = request.get_json(silent=True) or {}
+    title = row["title"]
+    content = row["content"]
+
+    if "title" in data:
+        title = clean_text(data["title"], 100) or "Bez tytulu"
+    if "content" in data:
+        if not isinstance(data["content"], str):
+            return error("Pole 'content' musi byc tekstem.")
+        content = data["content"][:20000]
+
+    db.execute(
+        "UPDATE notes SET title = ?, content = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+        (title, content, note_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+    return jsonify(note_to_dict(row))
+
+
+@app.delete("/api/notes/<int:note_id>")
+def delete_note(note_id):
+    db = get_db()
+    cur = db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    db.commit()
+    if cur.rowcount == 0:
+        return error("Nie znaleziono notatki.", 404)
+    return "", 204
+
 
 #AI
 if __name__ == "__main__":
