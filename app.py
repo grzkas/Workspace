@@ -157,7 +157,8 @@ def list_tasks():
     """Lista zadan. Opcjonalnie ?status=active|done&category=X."""
     db = get_db()
     status = request.args.get("status")
-    category = request.args.get("category")
+    category = request.args.get("category")  
+
     db.execute(
         """UPDATE tasks SET done = 0, next_due = date(next_due, '+' || recur_days || ' days')
            WHERE done = 1 AND recur_days > 0 AND next_due IS NOT NULL
@@ -165,15 +166,17 @@ def list_tasks():
     )
     db.commit()
 
-    query = "SELECT * FROM tasks"
+    conditions = []
+    params = []
     if status == "active":
-        query += " WHERE done = 0"
+        conditions.append("done = 0")
     elif status == "done":
-        query += " WHERE done = 1"
+        conditions.append("done = 1")
+
     if category:
-        query += " AND category = ?"
-        db.execute(query, (category,))
-    # niewykonane na gorze, potem wg priorytetu (high -> low), potem najnowsze
+        conditions.append("category = ?")
+        params.append(category)
+
     query = "SELECT * FROM tasks"
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
@@ -182,7 +185,7 @@ def list_tasks():
         " CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,"
         " id DESC"
     )
-    rows = get_db().execute(query).fetchall()
+    rows = db.execute(query, params).fetchall()
     return jsonify([task_to_dict(r) for r in rows])
 
 
@@ -191,14 +194,20 @@ def create_task():
     data = request.get_json(silent=True) or {}
     title = clean_text(data.get("title"), 200)
     priority = data.get("priority", "medium")
+    category = clean_text(data.get("category", ""), 50) or ""
+    recur_days = data.get("recur_days", 0)
     if not title:
         return error("Pole 'title' jest wymagane.")
     if priority not in PRIORITIES:
         return error("Priorytet musi byc jednym z: low, medium, high.")
+    if not isinstance(recur_days, int) or isinstance(recur_days, bool) or not 0 <= recur_days <= 3650:
+        return error("'recur_days' musi byc liczba calkowita 0-3650.")
 
+    next_due = _next_due(recur_days)
     db = get_db()
     cur = db.execute(
-        "INSERT INTO tasks (title, priority) VALUES (?, ?)", (title, priority)
+        "INSERT INTO tasks (title, priority, category, recur_days, next_due) VALUES (?, ?, ?, ?, ?)",
+        (title, priority, category, recur_days, next_due),
     )
     db.commit()
     row = db.execute("SELECT * FROM tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -230,10 +239,18 @@ def update_task(task_id):
         if not isinstance(data["done"], bool):
             return error("Pole 'done' musi byc typu boolean.")
         done = int(data["done"])
+    if "category" in data:
+        category = clean_text(data["category"], 50) or ""
+    if "recur_days" in data:
+        rd = data["recur_days"]
+        if not isinstance(rd, int) or isinstance(rd, bool) or not 0 <= rd <= 3650:
+            return error("'recur_days' musi byc liczba calkowita 0-3650.")
+        recur_days = rd
+        next_due = _next_due(recur_days) if recur_days else None        
 
     db.execute(
-        "UPDATE tasks SET title = ?, priority = ?, done = ? WHERE id = ?",
-        (title, priority, done, task_id),
+        "UPDATE tasks SET title = ?, priority = ?, done = ?, category = ?, recur_days = ?, next_due = ? WHERE id = ?",
+        (title, priority, done, category, recur_days, next_due, task_id),
     )
     db.commit()
     row = db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
