@@ -71,6 +71,24 @@ def close_db(_exc):
         db.close()
 
 def init_db():
+    """Tworzy tabele i wstawia domyslne ustawienia, jesli ich brak."""
+    db = sqlite3.connect(DB_PATH)
+    db.executescript(SCHEMA)
+    # do juz istniejacych baz danych (ALTER TABLE ignoruje blad jesli kolumna istnieje)
+    for col, dflt in [("category", "''"), ("recur_days", "0"), ("next_due", "NULL")]:
+        try:
+            db.execute(f"ALTER TABLE tasks ADD COLUMN {col} TEXT NOT NULL DEFAULT {dflt}")
+        except Exception:
+            pass  # kolumna juz istnieje
+    for key, value in DEFAULT_SETTINGS.items():
+        db.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            (key, json.dumps(value)),
+        )
+    db.commit()
+    db.close()
+
+def init_db():
     db= sqlite3.connect(DB_PATH)
     db.executescript(SCHEMA)
     for key, value in DEFAULT_SETTINGS.items():
