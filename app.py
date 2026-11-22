@@ -13,6 +13,15 @@ Priorites = ("low", "medium", "high")
 Themes = ("light", "dark", "ocean", "forest")
 Tiles = ("tasks", "nostes", "pomordo")
 
+BOARD_TYPES = ("sticky", "text", "rect", "ellipse")
+BOARD_COLORS = ("yellow", "orange", "pink", "purple", "blue", "green")
+BOARD_RANGES = {            # (min, max) dla pol liczbowych
+    "x": (-50000, 50000),
+    "y": (-50000, 50000),
+    "w": (40, 3000),
+    "h": (30, 3000),
+}
+
 Default_Settings = {
     "theme": "light",
     "layout": list(Tiles), 
