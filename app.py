@@ -138,19 +138,45 @@ def task_to_dict(row):
         "priority": row["priority"],
         "done": bool(row["done"]),
         "created_at": row["created_at"],
+        "category": row["category"] or "",   
+        "recur_days": row["recur_days"] or 0, 
+        "next_due": row["next_due"],           
+        "created_at": row["created_at"],
     }
+
+def _next_due(recur_days):
+    """Oblicza date nastepnego wykonania jako string ISO (lub None)."""
+    if not recur_days:
+        return None
+    import datetime
+    return (datetime.date.today() + datetime.timedelta(days=recur_days)).isoformat()
 
 
 @app.get("/api/tasks")
 def list_tasks():
-    """Lista zadan. Opcjonalnie ?status=active|done."""
+    """Lista zadan. Opcjonalnie ?status=active|done&category=X."""
+    db = get_db()
     status = request.args.get("status")
+    category = request.args.get("category")
+    db.execute(
+        """UPDATE tasks SET done = 0, next_due = date(next_due, '+' || recur_days || ' days')
+           WHERE done = 1 AND recur_days > 0 AND next_due IS NOT NULL
+                 AND next_due <= date('now','localtime')"""
+    )
+    db.commit()
+
     query = "SELECT * FROM tasks"
     if status == "active":
         query += " WHERE done = 0"
     elif status == "done":
         query += " WHERE done = 1"
+    if category:
+        query += " AND category = ?"
+        db.execute(query, (category,))
     # niewykonane na gorze, potem wg priorytetu (high -> low), potem najnowsze
+    query = "SELECT * FROM tasks"
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
     query += (
         " ORDER BY done ASC,"
         " CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,"
