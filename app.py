@@ -88,6 +88,25 @@ def init_db():
     db.commit()
     db.close()
 
+@app.get("/api/tasks/categories")
+def list_categories():
+    """Unikalne kategorie wsrod wszystkich zadan (niepuste)."""
+    rows = get_db().execute(
+        "SELECT DISTINCT category FROM tasks WHERE category != '' ORDER BY category COLLATE NOCASE"
+    ).fetchall()
+    return jsonify([r["category"] for r in rows])
+
+
+def error(message, status=400):
+    return jsonify({"error": message}), status
+
+
+def clean_text(value, max_len):
+    """Zwraca przyciety tekst lub None, jesli to nie string."""
+    if not isinstance(value, str):
+        return None
+    return value.strip()[:max_len]
+
 def init_db():
     db= sqlite3.connect(DB_PATH)
     db.executescript(SCHEMA)
