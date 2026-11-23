@@ -319,3 +319,67 @@ async function loadNotes() {
   try { saved = Number(localStorage.getItem("currentNoteId")); } catch { /* ignoruj */ }
   showNote((notes.find((n) => n.id === saved) || notes[0]).id);
 }
+
+const pomoTime  = $("#pomo-time");
+const pomoMode  = $("#pomo-mode");
+const pomoStart = $("#pomo-start");
+const pomoWork  = $("#pomo-work");
+const pomoBreak = $("#pomo-break");
+
+let pomo = { mode: "work", remaining: 25 * 60, running: false, endTime: 0, interval: null };
+
+const modeSeconds  = (mode) => (mode === "work" ? settings.pomodoro_work : settings.pomodoro_break) * 60;
+const formatTime   = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+function renderPomo() {
+  pomoTime.textContent  = formatTime(pomo.remaining);
+  pomoMode.textContent  = pomo.mode === "work" ? "Praca" : "Przerwa";
+  pomoStart.textContent = pomo.running ? "Pauza" : "Start";
+  document.title = pomo.running ? `${formatTime(pomo.remaining)} – Personal Dashboard` : "Personal Dashboard";
+}
+
+function stopTimer()  { clearInterval(pomo.interval); pomo.interval = null; pomo.running = false; }
+function startTimer() { pomo.running = true; pomo.endTime = Date.now() + pomo.remaining * 1000; pomo.interval = setInterval(tick, 250); renderPomo(); }
+function setMode(mode) { pomo.mode = mode; pomo.remaining = modeSeconds(mode); }
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = 880; osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4);
+  } catch { /* brak dzwieku - nic nie szkodzi */ }
+}
+
+async function tick() {
+  pomo.remaining = Math.max(0, Math.round((pomo.endTime - Date.now()) / 1000));
+  renderPomo();
+  if (pomo.remaining > 0) return;
+  stopTimer(); beep();
+  if (pomo.mode === "work") {
+    try { renderPomoStats(await api("/api/pomodoro", { method: "POST", body: { duration_min: settings.pomodoro_work } })); }
+    catch (err) { showError(err); }
+    setMode("break");
+  } else { setMode("work"); }
+  renderPomo();
+}
+
+pomoStart.addEventListener("click", () => { if (pomo.running) { stopTimer(); renderPomo(); } else if (pomo.remaining > 0) startTimer(); });
+$("#pomo-reset").addEventListener("click", () => { stopTimer(); pomo.remaining = modeSeconds(pomo.mode); renderPomo(); });
+$("#pomo-skip").addEventListener("click",  () => { stopTimer(); setMode(pomo.mode === "work" ? "break" : "work"); renderPomo(); });
+
+function onDurationChange(input, key) {
+  input.addEventListener("change", async () => {
+    const value = parseInt(input.value, 10);
+    if (!Number.isInteger(value) || value < 1 || value > 120) { input.value = settings[key]; return; }
+    try { await saveSettings({ [key]: value }); if (!pomo.running) { pomo.remaining = modeSeconds(pomo.mode); renderPomo(); } }
+    catch (err) { showError(err); }
+  });
+}
+onDurationChange(pomoWork,  "pomodoro_work");
+onDurationChange(pomoBreak, "pomodoro_break");
+
+function renderPomoStats(stats) {
+  $("#pomo-today").textContent   = stats.today;
+  $("#pomo-total").textContent   = stats.total;
+  $("#pomo-minutes").textContent = stats.total_minutes;
+}
