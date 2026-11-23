@@ -112,3 +112,52 @@ grid.querySelectorAll(".tile").forEach((tile) => {
   });
 });
 
+const taskForm        = $("#task-form");
+const taskTitle       = $("#task-title");
+const taskPriority    = $("#task-priority");
+const taskCategoryInput = $("#task-category");   //pole kategorii
+const taskRecurInput    = $("#task-recur");       //pole "powtórz co X dni"
+const taskList        = $("#task-list");
+const tasksEmpty      = $("#tasks-empty");
+const tasksCount      = $("#tasks-count");
+const taskFilterCat    = $("#task-filter-cat");   //filtr po kategorii
+const taskFilterStatus = $("#task-filter-status"); //filtr po statusie
+const categoryDatalist = $("#category-list");      //<datalist> dla autocomplete
+
+const PRIORITY_LABELS = { low: "Niski", medium: "Średni", high: "Wysoki" };
+let tasks = [];
+let allCategories = [];
+
+
+async function loadCategories() {
+  try { allCategories = await api("/api/tasks/categories"); } catch { allCategories = []; }
+  categoryDatalist.replaceChildren(
+    ...allCategories.map((c) => el("option", { value: c }))
+  );
+  const current = taskFilterCat.value;
+  taskFilterCat.replaceChildren(new Option("Wszystkie kategorie", ""));
+  allCategories.forEach((c) => taskFilterCat.appendChild(new Option(c, c)));
+  if (allCategories.includes(current)) taskFilterCat.value = current;
+}
+
+async function loadTasks() {
+  
+  const params = new URLSearchParams();
+  if (taskFilterStatus.value) params.set("status", taskFilterStatus.value);
+  if (taskFilterCat.value)    params.set("category", taskFilterCat.value);
+  tasks = await api("/api/tasks" + (params.toString() ? "?" + params : ""));
+  await loadCategories();
+  renderTasks();
+}
+
+async function updateTask(id, patch) {
+  try { await api(`/api/tasks/${id}`, { method: "PUT", body: patch }); await loadTasks(); }
+  catch (err) { showError(err); renderTasks(); }
+}
+
+function renderTasks() {
+  taskList.replaceChildren(...tasks.map(taskItem));
+  tasksCount.textContent = tasks.filter((t) => !t.done).length;
+  tasksEmpty.hidden = tasks.length > 0;
+}
+
