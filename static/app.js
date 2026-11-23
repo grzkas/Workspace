@@ -187,3 +187,32 @@ function taskItem(task) {
   return el("li", { className: `task p-${task.priority}${task.done ? " done" : ""}` }, ...kids);
 }
 
+function startEditTask(titleEl, task) {
+  const input = el("input", { type: "text", value: task.title, maxLength: 200 });
+  titleEl.replaceWith(input);
+  input.focus(); input.select();
+  let finished = false;
+  const finish = (save) => {
+    if (finished) return; finished = true;
+    const value = input.value.trim();
+    if (save && value && value !== task.title) updateTask(task.id, { title: value });
+    else renderTasks();
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); });
+  input.addEventListener("blur", () => finish(true));
+}
+
+taskForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const recurVal = parseInt(taskRecurInput.value, 10);
+  try {
+    await api("/api/tasks", { method: "POST", body: {
+      title: taskTitle.value,
+      priority: taskPriority.value,
+      category: taskCategoryInput.value.trim(),  // [AI-GENERATED] NOWE: kategoria
+      recur_days: Number.isInteger(recurVal) && recurVal >= 0 ? recurVal : 0, // [AI-GENERATED] NOWE: powtarzanie
+    }});
+    taskTitle.value = ""; taskCategoryInput.value = ""; taskRecurInput.value = "0";
+    await loadTasks();
+  } catch (err) { showError(err); }
+});
