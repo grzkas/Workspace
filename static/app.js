@@ -161,3 +161,29 @@ function renderTasks() {
   tasksEmpty.hidden = tasks.length > 0;
 }
 
+function taskItem(task) {
+  const check = el("input", { type: "checkbox", checked: task.done, "aria-label": "Oznacz jako wykonane",
+    onChange: () => updateTask(task.id, { done: check.checked }) });
+
+  const title = el("span", { className: "title", textContent: task.title,
+    onDblclick: () => startEditTask(title, task) });
+
+  const prio = el("select", { "aria-label": "Priorytet", onChange: () => updateTask(task.id, { priority: prio.value }) });
+  for (const [v, l] of Object.entries(PRIORITY_LABELS)) prio.add(new Option(l, v, false, v === task.priority));
+
+  const kids = [check, title];
+  
+  if (task.category) kids.push(el("span", { className: "task-category-badge", title: task.category, textContent: task.category }));
+  
+  if (task.recur_days > 0) kids.push(el("span", { className: "task-recur-badge", title: `Powtarza się co ${task.recur_days} dni`, textContent: `↺${task.recur_days}d` }));
+
+  kids.push(
+    prio,
+    el("button", { type: "button", className: "icon", title: "Edytuj", textContent: "✎", onClick: () => startEditTask(title, task) }),
+    el("button", { type: "button", className: "icon", title: "Usuń",   textContent: "✕",
+      onClick: async () => { try { await api(`/api/tasks/${task.id}`, { method: "DELETE" }); await loadTasks(); } catch (err) { showError(err); } }
+    }),
+  );
+  return el("li", { className: `task p-${task.priority}${task.done ? " done" : ""}` }, ...kids);
+}
+
