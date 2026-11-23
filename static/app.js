@@ -216,3 +216,106 @@ taskForm.addEventListener("submit", async (e) => {
     await loadTasks();
   } catch (err) { showError(err); }
 });
+
+
+taskFilterCat.addEventListener("change", loadTasks);
+taskFilterStatus.addEventListener("change", loadTasks);
+
+
+$("#task-export").addEventListener("click", () => {
+  const rows = tasks.map((t) => ({
+    "Tytuł": t.title, "Priorytet": PRIORITY_LABELS[t.priority] || t.priority,
+    "Kategoria": t.category || "", "Status": t.done ? "Wykonane" : "Aktywne",
+    "Powtarzanie (dni)": t.recur_days || 0, "Następne wykonanie": t.next_due || "", "Utworzono": t.created_at,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws["!cols"] = [{ wch: 40 }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Zadania");
+  XLSX.writeFile(wb, "zadania.xlsx");
+});
+
+const noteSelect  = $("#note-select");
+const noteTitle   = $("#note-title");
+const noteContent = $("#note-content");
+const noteStatus  = $("#note-status");
+const AUTOSAVE_DELAY_MS = 800;
+
+let notes = [], currentNoteId = null, saveTimer = null;
+
+const currentNote = () => notes.find((n) => n.id === currentNoteId) || null;
+
+function renderNoteSelect() {
+  noteSelect.replaceChildren(...notes.map((n) => new Option(n.title, n.id)));
+  if (currentNoteId !== null) noteSelect.value = currentNoteId;
+}
+
+function showNote(id) {
+  currentNoteId = id;
+  const note = currentNote();
+  noteTitle.value = note ? note.title : "";
+  noteContent.value = note ? note.content : "";
+  noteTitle.disabled = noteContent.disabled = !note;
+  renderNoteSelect();
+  try { localStorage.setItem("currentNoteId", String(id)); } catch { /* ignoruj */ }
+}
+
+async function saveCurrentNote(keepalive = false) {
+  const note = currentNote();
+  if (!note) return;
+  clearTimeout(saveTimer); saveTimer = null;
+  try {
+    const saved = await api(`/api/notes/${note.id}`, { method: "PUT",
+      body: { title: noteTitle.value, content: noteContent.value }, keepalive });
+    Object.assign(note, saved);
+    noteSelect.querySelector(`option[value="${note.id}"]`).textContent = note.title;
+    noteStatus.textContent = "Zapisano " + new Date().toLocaleTimeString("pl-PL");
+  } catch (err) { noteStatus.textContent = "Błąd zapisu!"; console.error(err); }
+}
+
+function scheduleSave() {
+  noteStatus.textContent = "Zapisywanie…";
+  const note = currentNote();
+  if (note) { note.title = noteTitle.value; note.content = noteContent.value; }
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveCurrentNote(), AUTOSAVE_DELAY_MS);
+}
+
+noteTitle.addEventListener("input", scheduleSave);
+noteContent.addEventListener("input", scheduleSave);
+
+noteSelect.addEventListener("change", async () => {
+  if (saveTimer) await saveCurrentNote();
+  showNote(Number(noteSelect.value));
+  noteStatus.textContent = "—";
+});
+
+$("#note-new").addEventListener("click", async () => {
+  try {
+    if (saveTimer) await saveCurrentNote();
+    const note = await api("/api/notes", { method: "POST", body: { title: "Nowa notatka" } });
+    notes.unshift(note); showNote(note.id); noteTitle.select();
+  } catch (err) { showError(err); }
+});
+
+$("#note-delete").addEventListener("click", async () => {
+  const note = currentNote();
+  if (!note || !confirm(`Usunąć notatkę „${note.title}"?`)) return;
+  try {
+    clearTimeout(saveTimer); saveTimer = null;
+    await api(`/api/notes/${note.id}`, { method: "DELETE" });
+    notes = notes.filter((n) => n.id !== note.id);
+    showNote(notes.length ? notes[0].id : null);
+    noteStatus.textContent = "Usunięto";
+  } catch (err) { showError(err); }
+});
+
+window.addEventListener("beforeunload", () => { if (saveTimer) saveCurrentNote(true); });
+
+async function loadNotes() {
+  notes = await api("/api/notes");
+  if (notes.length === 0) notes.push(await api("/api/notes", { method: "POST", body: { title: "Moja notatka" } }));
+  let saved = null;
+  try { saved = Number(localStorage.getItem("currentNoteId")); } catch { /* ignoruj */ }
+  showNote((notes.find((n) => n.id === saved) || notes[0]).id);
+}
