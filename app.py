@@ -9,7 +9,7 @@ DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-Priorites = ("low", "medium", "high")
+PRIORITIES = ("low", "medium", "high")
 Themes = ("light", "dark", "ocean", "forest")
 Tiles = ("tasks", "nostes", "pomordo")
 
@@ -22,7 +22,7 @@ BOARD_RANGES = {            # (min, max) dla pol liczbowych
     "h": (30, 3000),
 }
 
-Default_Settings = {
+DEFAULT_SETTINGS = {
     "theme": "light",
     "layout": list(Tiles), 
     "hidden": [],
@@ -117,7 +117,7 @@ def init_db():
     db.commit()
     db.close()
 
-def error(message, statues=400):
+def error(message, status=400):
     return jsonify({"error": message}), status
 
 def clean_text(value, max_len) :
