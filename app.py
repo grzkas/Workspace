@@ -10,8 +10,8 @@ DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
 PRIORITIES = ("low", "medium", "high")
-Themes = ("light", "dark", "ocean", "forest")
-Tiles = ("tasks", "nostes", "pomordo")
+THEMES = ("light", "dark", "ocean", "forest")
+TILES = ("tasks", "notes", "pomodoro")
 
 BOARD_TYPES = ("sticky", "text", "rect", "ellipse")
 BOARD_COLORS = ("yellow", "orange", "pink", "purple", "blue", "green")
@@ -24,7 +24,7 @@ BOARD_RANGES = {            # (min, max) dla pol liczbowych
 
 DEFAULT_SETTINGS = {
     "theme": "light",
-    "layout": list(Tiles), 
+    "layout": list(TILES), 
     "hidden": [],
     "pomodoro_work": 25,
     "pomodoro_break": 5,
@@ -376,6 +376,68 @@ def pomodoro_add_session():
     db.execute("INSERT INTO pomodoro_sessions (duration_min) VALUES (?)", (duration,))
     db.commit()
     return pomodoro_stats(), 201
+
+    #Api Ustawienia
+    
+def read_settings():
+    rows = get_db().execute("SELECT key, value FROM settings").fetchall()
+    settings = dict(DEFAULT_SETTINGS)
+    for r in rows:
+        settings[r["key"]] = json.loads(r["value"])
+    # stara baza mogla zapisac uklad bez nowszych kafelkow - dopisz brakujace na koncu
+    layout = [t for t in settings["layout"] if t in TILES]
+    for i, tile in enumerate(TILES):
+        if tile not in layout:
+            # wstaw przed pierwszym z kolejnych kafelkow, ktory juz jest w ukladzie
+            later = [layout.index(t) for t in TILES[i + 1:] if t in layout]
+            layout.insert(min(later) if later else len(layout), tile)
+    settings["layout"] = layout
+    return settings
+
+
+@app.get("/api/settings")
+def get_settings():
+    return jsonify(read_settings())
+
+
+@app.put("/api/settings")
+def update_settings():
+    data = request.get_json(silent=True) or {}
+    updates = {}
+
+    if "theme" in data:
+        if data["theme"] not in THEMES:
+            return error("Nieznany motyw.")
+        updates["theme"] = data["theme"]
+
+    if "layout" in data:
+        layout = data["layout"]
+        if not isinstance(layout, list) or sorted(layout) != sorted(TILES):
+            return error("'layout' musi zawierac kazdy kafelek dokladnie raz.")
+        updates["layout"] = layout
+
+    if "hidden" in data:
+        hidden = data["hidden"]
+        if not isinstance(hidden, list) or any(t not in TILES for t in hidden):
+            return error("'hidden' zawiera nieznany kafelek.")
+        updates["hidden"] = sorted(set(hidden))
+
+    for key in ("pomodoro_work", "pomodoro_break"):
+        if key in data:
+            value = data[key]
+            if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 120:
+                return error(f"'{key}' musi byc liczba calkowita 1-120.")
+            updates[key] = value
+
+    db = get_db()
+    for key, value in updates.items():
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, json.dumps(value)),
+        )
+    db.commit()
+    return jsonify(read_settings())
 
 
 
