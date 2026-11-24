@@ -450,3 +450,150 @@ function refreshSelection() {
 }
 
 function select(sel) { selected = sel; refreshSelection(); }
+
+function edgePoint(item, target, gap) {
+  const cx = item.x + item.w / 2, cy = item.y + item.h / 2;
+  const dx = target.x - cx, dy = target.y - cy;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return { x: cx, y: cy };
+  const t = item.type === "ellipse"
+    ? 1 / Math.hypot(dx / (item.w / 2), dy / (item.h / 2))
+    : Math.min(item.w / 2 / Math.abs(dx || 1e-9), item.h / 2 / Math.abs(dy || 1e-9));
+  const scale = t + gap / len;
+  return { x: cx + dx * scale, y: cy + dy * scale };
+}
+
+function svgEl(name, attrs) {
+  const node = document.createElementNS(SVG_NS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+}
+
+function drawLinks() {
+  boardSvg.replaceChildren();
+  for (const link of board.links) {
+    const a = itemById(link.from_id), b = itemById(link.to_id);
+    if (!a || !b) continue;
+    const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    const p1 = edgePoint(a, cb, 3), p2 = edgePoint(b, ca, 3);
+    // grot strzałki: trójkąt zakończony w punkcie p2
+    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x), L = 13, W = 6;
+    const bx = p2.x - Math.cos(angle) * L, by = p2.y - Math.sin(angle) * L;
+    const head = [`${p2.x},${p2.y}`, `${bx - Math.sin(angle)*W},${by + Math.cos(angle)*W}`, `${bx + Math.sin(angle)*W},${by - Math.cos(angle)*W}`].join(" ");
+    const g = svgEl("g", { class: "b-link", "data-id": link.id });
+    const line = { x1: p1.x, y1: p1.y, x2: bx, y2: by };
+    g.append(svgEl("line", { ...line, class: "hit" }), svgEl("line", { ...line, class: "visible" }), svgEl("polygon", { points: head, class: "head" }));
+    boardSvg.appendChild(g);
+  }
+  refreshSelection();
+}
+
+// ---- zapis do API -----------------------------------------------------------
+async function saveItem(id, patch) {
+  boardStatus.textContent = "Zapisywanie…";
+  try { await api(`/api/board/items/${id}`, { method: "PUT", body: patch }); boardStatus.textContent = "Zapisano " + new Date().toLocaleTimeString("pl-PL"); }
+  catch (err) { boardStatus.textContent = "Błąd zapisu!"; console.error(err); }
+}
+
+async function createItem(type, point) {
+  const d = ITEM_DEFAULTS[type];
+  try {
+    const item = await api("/api/board/items", { method: "POST", body: {
+      type, color: boardColor, text: "",
+      x: Math.round(clamp(point.x - d.w / 2, -COORD_LIMIT, COORD_LIMIT)),
+      y: Math.round(clamp(point.y - d.h / 2, -COORD_LIMIT, COORD_LIMIT)),
+      w: d.w, h: d.h,
+    }});
+    board.items.push(item); setTool("select"); selected = { kind: "item", id: item.id };
+    renderBoard(); refreshSelection(); startEdit(item.id);
+  } catch (err) { showError(err); }
+}
+
+async function deleteItem(id) {
+  try {
+    await api(`/api/board/items/${id}`, { method: "DELETE" });
+    board.items = board.items.filter((i) => i.id !== id);
+    board.links = board.links.filter((l) => l.from_id !== id && l.to_id !== id);
+    if (selected && selected.kind === "item" && selected.id === id) selected = null;
+    renderBoard(); refreshSelection();
+  } catch (err) { showError(err); }
+}
+
+async function deleteSelected() {
+  if (!selected) return;
+  if (selected.kind === "item") return deleteItem(selected.id);
+  try {
+    await api(`/api/board/links/${selected.id}`, { method: "DELETE" });
+    board.links = board.links.filter((l) => l.id !== selected.id);
+    selected = null; drawLinks();
+  } catch (err) { showError(err); }
+}
+
+function bringToFront(item) {
+  const top = Math.max(0, ...board.items.map((i) => i.z));
+  if (item.z >= top) return;
+  item.z = top + 1; paintItem(itemEl(item.id), item); saveItem(item.id, { z: item.z });
+}
+
+// ---- edycja tekstu w miejscu (textarea) --------------------------------------
+// Ctrl+Enter lub utrata fokusu = zapis, Escape = anuluj. Pusty element typu "tekst" znika.
+function startEdit(id) {
+  const item = itemById(id), node = itemEl(id);
+  if (!item || !node || editing !== null) return;
+  editing = id;
+  const area = el("textarea", { className: "b-edit", value: item.text, maxLength: 2000, placeholder: "Wpisz tekst…" });
+  node.querySelector(".b-label").replaceWith(area);
+  area.focus();
+  let finished = false;
+  const finish = (save) => {
+    if (finished) return; finished = true;
+    if (editing === id) editing = null;
+    const value = area.value.trim();
+    const label = el("div", { className: "b-label", textContent: save ? value : item.text });
+    area.replaceWith(label);
+    const current = itemById(id);
+    if (!current) return;
+    if (save && value !== current.text) { current.text = value; saveItem(id, { text: value }); }
+    if (current.type === "text" && current.text === "") deleteItem(id);
+    boardViewport.focus({ preventScroll: true });
+  };
+  area.addEventListener("keydown", (e) => { if (e.key === "Escape") finish(false); if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) finish(true); });
+  area.addEventListener("blur", () => finish(true));
+}
+
+// ---- narzędzia i kolory -----------------------------------------------------
+function markLinkSource() {
+  qAll(".b-item", boardWorld).forEach((node) => node.classList.toggle("link-source", linkSource === Number(node.dataset.id)));
+}
+
+function setTool(name) {
+  tool = name; linkSource = null; markLinkSource();
+  boardViewport.dataset.tool = name;
+  boardHint.textContent = TOOL_HINTS[name];
+  qAll("[data-tool]").forEach((b) => { if (b.classList.contains("tool")) b.classList.toggle("active", b.dataset.tool === name); });
+}
+
+qAll("button.tool").forEach((btn) => btn.addEventListener("click", () => setTool(btn.dataset.tool)));
+
+qAll(".swatch").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    boardColor = btn.dataset.color;
+    qAll(".swatch").forEach((s) => s.classList.toggle("active", s === btn));
+    // zaznaczony element (poza czystym tekstem) zmienia kolor od razu
+    const item = selected && selected.kind === "item" ? itemById(selected.id) : null;
+    if (item && item.type !== "text" && item.color !== boardColor) {
+      item.color = boardColor; paintItem(itemEl(item.id), item); saveItem(item.id, { color: boardColor });
+    }
+  });
+});
+
+$("#board-zoom-in").addEventListener("click",  () => zoomCenter(1.25));
+$("#board-zoom-out").addEventListener("click", () => zoomCenter(1 / 1.25));
+$("#board-fit").addEventListener("click", fitView);
+boardDeleteBtn.addEventListener("click", deleteSelected);
+
+$("#board-clear").addEventListener("click", async () => {
+  if (board.items.length === 0 || !confirm("Usunąć wszystkie elementy z tablicy?")) return;
+  try { await api("/api/board", { method: "DELETE" }); board = { items: [], links: [] }; selected = null; renderBoard(); refreshSelection(); }
+  catch (err) { showError(err); }
+});
