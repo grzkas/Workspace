@@ -383,3 +383,70 @@ function renderPomoStats(stats) {
   $("#pomo-total").textContent   = stats.total;
   $("#pomo-minutes").textContent = stats.total_minutes;
 }
+
+function applyView(persist = true) {
+  boardWorld.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  const step = 24 * view.z;
+  boardViewport.style.backgroundSize     = `${step}px ${step}px`;
+  boardViewport.style.backgroundPosition = `${view.x}px ${view.y}px`;
+  zoomLabel.textContent = Math.round(view.z * 100) + "%";
+  if (persist) try { localStorage.setItem("boardView", JSON.stringify(view)); } catch { /* ignoruj */ }
+}
+
+const toWorld = (e) => { const r = boardViewport.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.z, y: (e.clientY - r.top - view.y) / view.z }; };
+
+function zoomAt(factor, cx, cy) {
+  const z = clamp(view.z * factor, MIN_ZOOM, MAX_ZOOM), k = z / view.z;
+  view.x = cx - (cx - view.x) * k; view.y = cy - (cy - view.y) * k; view.z = z;
+  applyView();
+}
+
+function zoomCenter(factor) { const r = boardViewport.getBoundingClientRect(); zoomAt(factor, r.width / 2, r.height / 2); }
+
+function fitView() {
+  const r = boardViewport.getBoundingClientRect();
+  if (board.items.length === 0) { view = { x: 40, y: 40, z: 1 }; return applyView(); }
+  const minX = Math.min(...board.items.map((i) => i.x)), minY = Math.min(...board.items.map((i) => i.y));
+  const maxX = Math.max(...board.items.map((i) => i.x + i.w)), maxY = Math.max(...board.items.map((i) => i.y + i.h));
+  const pad = 40;
+  view.z = clamp(Math.min((r.width - 2*pad) / (maxX - minX), (r.height - 2*pad) / (maxY - minY)), MIN_ZOOM, 1.5);
+  view.x = (r.width  - (maxX - minX) * view.z) / 2 - minX * view.z;
+  view.y = (r.height - (maxY - minY) * view.z) / 2 - minY * view.z;
+  applyView();
+}
+
+// ---- rysowanie elementów ----------------------------------------------------
+function buildItemEl(item) {
+  const node = el("div", { "data-id": item.id });
+  node.append(el("div", { className: "b-label" }), el("span", { className: "b-resize" }));
+  paintItem(node, item);
+  return node;
+}
+
+function paintItem(node, item) {
+  if (!node) return;
+  const isSel = selected && selected.kind === "item" && selected.id === item.id;
+  node.className = `b-item t-${item.type} c-${item.color}` + (isSel ? " selected" : "") + (linkSource === item.id ? " link-source" : "");
+  Object.assign(node.style, { left: item.x + "px", top: item.y + "px", width: item.w + "px", height: item.h + "px", zIndex: item.z });
+  const label = node.querySelector(".b-label"); // brak w trakcie edycji (jest textarea)
+  if (label) label.textContent = item.text;     // textContent -> brak ryzyka XSS
+}
+
+function renderBoard() {
+  editing = null;
+  qAll(".b-item", boardWorld).forEach((n) => n.remove());
+  board.items.forEach((item) => boardWorld.appendChild(buildItemEl(item)));
+  drawLinks();
+  boardCount.textContent = board.items.length;
+  boardEmpty.hidden = board.items.length > 0;
+}
+
+function refreshSelection() {
+  qAll(".selected", boardWorld).forEach((n) => n.classList.remove("selected"));
+  boardDeleteBtn.disabled = !selected;
+  if (!selected) return;
+  const node = selected.kind === "item" ? itemEl(selected.id) : boardSvg.querySelector(`.b-link[data-id="${selected.id}"]`);
+  if (node) node.classList.add("selected");
+}
+
+function select(sel) { selected = sel; refreshSelection(); }
