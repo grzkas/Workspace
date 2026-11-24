@@ -1,4 +1,5 @@
 import json
+import math
 import os 
 import sqlite3
 
@@ -438,6 +439,153 @@ def update_settings():
         )
     db.commit()
     return jsonify(read_settings())
+
+#Api tablica
+
+def is_number(value):
+    """Skonczona liczba. JSON w Pythonie dopuszcza NaN/Infinity, a bool to int."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def json_object():
+    """Cialo zapytania jako slownik (pusty, gdy to nie obiekt JSON)."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def apply_item_fields(item, data):
+    """Naklada pola z `data` na slownik `item`. Zwraca komunikat bledu lub None."""
+    for key, (low, high) in BOARD_RANGES.items():
+        if key in data:
+            value = data[key]
+            if not is_number(value) or not low <= value <= high:
+                return f"'{key}' musi byc liczba z zakresu {low}-{high}."
+            item[key] = value
+    if "text" in data:
+        if not isinstance(data["text"], str):
+            return "Pole 'text' musi byc tekstem."
+        item["text"] = data["text"][:2000]
+    if "color" in data:
+        if data["color"] not in BOARD_COLORS:
+            return "Nieznany kolor."
+        item["color"] = data["color"]
+    if "z" in data:
+        z = data["z"]
+        if not isinstance(z, int) or isinstance(z, bool) or not 0 <= z <= 1_000_000_000:
+            return "'z' musi byc liczba calkowita."
+        item["z"] = z
+    return None
+
+
+def board_item_to_dict(row):
+    return {key: row[key] for key in ("id", "type", "x", "y", "w", "h", "text", "color", "z")}
+
+
+def board_link_to_dict(row):
+    return {"id": row["id"], "from_id": row["from_id"], "to_id": row["to_id"]}
+
+
+@app.get("/api/board")
+def get_board():
+    """Cala tablica naraz: elementy (wg warstw) i polaczenia."""
+    db = get_db()
+    items = db.execute("SELECT * FROM board_items ORDER BY z ASC, id ASC").fetchall()
+    links = db.execute("SELECT * FROM board_links ORDER BY id ASC").fetchall()
+    return jsonify(
+        {
+            "items": [board_item_to_dict(r) for r in items],
+            "links": [board_link_to_dict(r) for r in links],
+        }
+    )
+
+
+@app.delete("/api/board")
+def clear_board():
+    db = get_db()
+    db.execute("DELETE FROM board_links")
+    db.execute("DELETE FROM board_items")
+    db.commit()
+    return "", 204
+
+
+@app.post("/api/board/items")
+def create_board_item():
+    data = json_object()
+    item_type = data.get("type")
+    if item_type not in BOARD_TYPES:
+        return error("Typ musi byc jednym z: sticky, text, rect, ellipse.")
+
+    item = {"x": 0, "y": 0, "w": 180, "h": 120, "text": "", "color": "yellow"}
+    message = apply_item_fields(item, data)
+    if message:
+        return error(message)
+
+    db = get_db()
+    top = db.execute("SELECT COALESCE(MAX(z), 0) + 1 AS z FROM board_items").fetchone()["z"]
+    cur = db.execute(
+        "INSERT INTO board_items (type, x, y, w, h, text, color, z) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (item_type, item["x"], item["y"], item["w"], item["h"], item["text"], item["color"], top),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM board_items WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return jsonify(board_item_to_dict(row)), 201
+
+
+@app.put("/api/board/items/<int:item_id>")
+def update_board_item(item_id):
+    """Czesciowa aktualizacja: x, y, w, h, text, color, z (typ sie nie zmienia)."""
+    db = get_db()
+    row = db.execute("SELECT * FROM board_items WHERE id = ?", (item_id,)).fetchone()
+    if row is None: return error("Nie znaleziono elementu.", 404)
+    item = board_item_to_dict(row)
+    msg = apply_item_fields(item, json_object())
+    if msg: return error(msg)
+    db.execute(
+        "UPDATE board_items SET x=?,y=?,w=?,h=?,text=?,color=?,z=? WHERE id=?",
+        (item["x"], item["y"], item["w"], item["h"], item["text"], item["color"], item["z"], item_id),
+    )
+    db.commit()
+    return jsonify(board_item_to_dict(db.execute("SELECT * FROM board_items WHERE id=?", (item_id,)).fetchone()))
+
+
+@app.delete("/api/board/items/<int:item_id>")
+def delete_board_item(item_id):
+    db = get_db()
+    cur = db.execute("DELETE FROM board_items WHERE id = ?", (item_id,))
+    if cur.rowcount == 0: return error("Nie znaleziono elementu.", 404)
+    db.execute("DELETE FROM board_links WHERE from_id=? OR to_id=?", (item_id, item_id))  # polaczenia z usunietym elementem nie maja sensu
+    db.commit()
+    return "", 204
+
+
+@app.post("/api/board/links")
+def create_board_link():
+    data = json_object()
+    from_id, to_id = data.get("from_id"), data.get("to_id")
+    for v in (from_id, to_id):
+        if not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= 2**31:
+            return error("'from_id' i 'to_id' musza byc dodatnimi liczbami calkowitymi.")
+    if from_id == to_id: return error("Nie mozna polaczyc elementu z samym soba.")
+    db = get_db()
+    if db.execute("SELECT COUNT(*) AS c FROM board_items WHERE id IN (?,?)", (from_id, to_id)).fetchone()["c"] != 2:
+        return error("Nie znaleziono elementu.", 404)
+    if db.execute("SELECT 1 FROM board_links WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?)", (from_id, to_id, to_id, from_id)).fetchone():
+        return error("Te elementy sa juz polaczone.")
+    cur = db.execute("INSERT INTO board_links (from_id, to_id) VALUES (?, ?)", (from_id, to_id))
+    db.commit()
+    return jsonify(board_link_to_dict(db.execute("SELECT * FROM board_links WHERE id=?", (cur.lastrowid,)).fetchone())), 201
+
+
+@app.delete("/api/board/links/<int:link_id>")
+def delete_board_link(link_id):
+    db = get_db()
+    cur = db.execute("DELETE FROM board_links WHERE id = ?", (link_id,))
+    db.commit()
+    return ("", 204) if cur.rowcount else error("Nie znaleziono polaczenia.", 404)
 
 
 
