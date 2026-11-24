@@ -325,14 +325,58 @@ def update_note(note_id):
     return jsonify(note_to_dict(row))
 
 
+@app.put("/api/notes/<int:note_id>")
+def update_note(note_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+    if row is None:
+        return error("Nie znaleziono notatki.", 404)
+    data = request.get_json(silent=True) or {}
+    title   = clean_text(data["title"], 100) or "Bez tytulu" if "title" in data else row["title"]
+    content = row["content"]
+    if "content" in data:
+        if not isinstance(data["content"], str): return error("Pole 'content' musi byc tekstem.")
+        content = data["content"][:20000]
+    db.execute(
+        "UPDATE notes SET title=?,content=?,updated_at=datetime('now','localtime') WHERE id=?",
+        (title, content, note_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
+    return jsonify(note_to_dict(row))
+
 @app.delete("/api/notes/<int:note_id>")
 def delete_note(note_id):
     db = get_db()
     cur = db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
     db.commit()
-    if cur.rowcount == 0:
-        return error("Nie znaleziono notatki.", 404)
-    return "", 204
+    return ("", 204) if cur.rowcount else error("Nie znaleziono notatki.", 404)
+
+# Pomodoro API
+@app.get("/api/pomodoro")
+def pomodoro_stats():
+    db = get_db()
+    q = db.execute
+    return jsonify({
+        "today":        q("SELECT COUNT(*) AS c FROM pomodoro_sessions WHERE date(completed_at)=date('now','localtime')").fetchone()["c"],
+        "total":        q("SELECT COUNT(*) AS c FROM pomodoro_sessions").fetchone()["c"],
+        "total_minutes": q("SELECT COALESCE(SUM(duration_min),0) AS m FROM pomodoro_sessions").fetchone()["m"],
+    })
+
+
+@app.post("/api/pomodoro")
+def pomodoro_add_session():
+    """Zapisuje jedna ukonczona sesje pracy."""
+    data = request.get_json(silent=True) or {}
+    duration = data.get("duration_min")
+    if not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 180:
+        return error("'duration_min' musi byc liczba calkowita 1-180.")
+
+    db = get_db()
+    db.execute("INSERT INTO pomodoro_sessions (duration_min) VALUES (?)", (duration,))
+    db.commit()
+    return pomodoro_stats(), 201
+
 
 
 #AI
