@@ -305,33 +305,6 @@ def update_note(note_id):
     row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
     if row is None:
         return error("Nie znaleziono notatki.", 404)
-
-    data = request.get_json(silent=True) or {}
-    title = row["title"]
-    content = row["content"]
-
-    if "title" in data:
-        title = clean_text(data["title"], 100) or "Bez tytulu"
-    if "content" in data:
-        if not isinstance(data["content"], str):
-            return error("Pole 'content' musi byc tekstem.")
-        content = data["content"][:20000]
-
-    db.execute(
-        "UPDATE notes SET title = ?, content = ?, updated_at = datetime('now','localtime') WHERE id = ?",
-        (title, content, note_id),
-    )
-    db.commit()
-    row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
-    return jsonify(note_to_dict(row))
-
-
-@app.put("/api/notes/<int:note_id>")
-def update_note(note_id):
-    db = get_db()
-    row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
-    if row is None:
-        return error("Nie znaleziono notatki.", 404)
     data = request.get_json(silent=True) or {}
     title   = clean_text(data["title"], 100) or "Bez tytulu" if "title" in data else row["title"]
     content = row["content"]
@@ -590,6 +563,6 @@ def delete_board_link(link_id):
 
 
 #AI
+init_db()
 if __name__ == "__main__":
     app.run(debug=True)
-#
