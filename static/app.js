@@ -1,5 +1,4 @@
 
-
 "use strict";
 
 
@@ -173,7 +172,7 @@ function taskItem(task) {
   return el("li", { className: `task p-${task.priority}${task.done ? " done" : ""}` }, ...kids);
 }
 
-// edycja tytulu "w miejscu": Enter / utrata fokusu = zapis, Escape = anuluj
+
 function startEditTask(titleEl, task) {
   const input = el("input", { type: "text", value: task.title, maxLength: 200 });
   titleEl.replaceWith(input);
