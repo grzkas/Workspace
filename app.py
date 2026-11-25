@@ -7,7 +7,7 @@ import math
 import os
 import sqlite3
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, g, jsonify, request  # pyright: ignore[reportMissingImports]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
