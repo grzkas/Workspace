@@ -1,6 +1,4 @@
-
 "use strict";
-
 
 async function api(url, { method = "GET", body, keepalive = false } = {}) {
   const res = await fetch(url, {
@@ -22,7 +20,6 @@ function showError(err) { console.error(err); alert(err.message || "Wystąpił b
 const $ = (sel) => document.querySelector(sel);
 const qAll = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-// Helper tworzacy element DOM: el("div", { className, textContent, onClick, ... }, ...dzieci)
 function el(tag, attrs = {}, ...kids) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -35,7 +32,7 @@ function el(tag, attrs = {}, ...kids) {
   return node;
 }
 
-
+// === USTAWIENIA ===
 let settings = null;
 const grid = $("#grid");
 const themeSelect = $("#theme-select");
@@ -65,7 +62,7 @@ qAll("[data-toggle]").forEach((box) => {
   });
 });
 
-
+// === PRZECIAGANIE KAFELKOW ===
 let draggedTile = null;
 
 qAll(".tile", grid).forEach((tile) => {
@@ -77,7 +74,7 @@ qAll(".tile", grid).forEach((tile) => {
     draggedTile = tile;
     tile.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", tile.dataset.tile); // wymagane przez Firefox
+    e.dataTransfer.setData("text/plain", tile.dataset.tile);
   });
   tile.addEventListener("dragover",  (e) => { if (!draggedTile || draggedTile === tile) return; e.preventDefault(); tile.classList.add("drag-over"); });
   tile.addEventListener("dragleave", () => tile.classList.remove("drag-over"));
@@ -96,29 +93,26 @@ qAll(".tile", grid).forEach((tile) => {
   });
 });
 
-
-const taskForm        = $("#task-form");
-const taskTitle       = $("#task-title");
-const taskPriority    = $("#task-priority");
-const taskCategoryInput = $("#task-category");   
-const taskRecurInput    = $("#task-recur");       
-const taskList        = $("#task-list");
-const tasksEmpty      = $("#tasks-empty");
-const tasksCount      = $("#tasks-count");
-const taskFilterCat    = $("#task-filter-cat");   
-const taskFilterStatus = $("#task-filter-status"); 
-const categoryDatalist = $("#category-list");      
+// === ZADANIA ===
+const taskForm         = $("#task-form");
+const taskTitle        = $("#task-title");
+const taskPriority     = $("#task-priority");
+const taskCategoryInput = $("#task-category");
+const taskRecurInput    = $("#task-recur");
+const taskList         = $("#task-list");
+const tasksEmpty       = $("#tasks-empty");
+const tasksCount       = $("#tasks-count");
+const taskFilterCat    = $("#task-filter-cat");
+const taskFilterStatus = $("#task-filter-status");
+const categoryDatalist = $("#category-list");
 
 const PRIORITY_LABELS = { low: "Niski", medium: "Średni", high: "Wysoki" };
 let tasks = [];
 let allCategories = [];
 
-
 async function loadCategories() {
   try { allCategories = await api("/api/tasks/categories"); } catch { allCategories = []; }
-  categoryDatalist.replaceChildren(
-    ...allCategories.map((c) => el("option", { value: c }))
-  );
+  categoryDatalist.replaceChildren(...allCategories.map((c) => el("option", { value: c })));
   const current = taskFilterCat.value;
   taskFilterCat.replaceChildren(new Option("Wszystkie kategorie", ""));
   allCategories.forEach((c) => taskFilterCat.appendChild(new Option(c, c)));
@@ -126,7 +120,6 @@ async function loadCategories() {
 }
 
 async function loadTasks() {
-  
   const params = new URLSearchParams();
   if (taskFilterStatus.value) params.set("status", taskFilterStatus.value);
   if (taskFilterCat.value)    params.set("category", taskFilterCat.value);
@@ -149,29 +142,23 @@ function renderTasks() {
 function taskItem(task) {
   const check = el("input", { type: "checkbox", checked: task.done, "aria-label": "Oznacz jako wykonane",
     onChange: () => updateTask(task.id, { done: check.checked }) });
-
   const title = el("span", { className: "title", textContent: task.title,
     onDblclick: () => startEditTask(title, task) });
-
   const prio = el("select", { "aria-label": "Priorytet", onChange: () => updateTask(task.id, { priority: prio.value }) });
   for (const [v, l] of Object.entries(PRIORITY_LABELS)) prio.add(new Option(l, v, false, v === task.priority));
 
   const kids = [check, title];
-  
   if (task.category) kids.push(el("span", { className: "task-category-badge", title: task.category, textContent: task.category }));
-  
   if (task.recur_days > 0) kids.push(el("span", { className: "task-recur-badge", title: `Powtarza się co ${task.recur_days} dni`, textContent: `↺${task.recur_days}d` }));
-
   kids.push(
     prio,
     el("button", { type: "button", className: "icon", title: "Edytuj", textContent: "✎", onClick: () => startEditTask(title, task) }),
-    el("button", { type: "button", className: "icon", title: "Usuń",   textContent: "✕",
+    el("button", { type: "button", className: "icon", title: "Usuń", textContent: "✕",
       onClick: async () => { try { await api(`/api/tasks/${task.id}`, { method: "DELETE" }); await loadTasks(); } catch (err) { showError(err); } }
     }),
   );
   return el("li", { className: `task p-${task.priority}${task.done ? " done" : ""}` }, ...kids);
 }
-
 
 function startEditTask(titleEl, task) {
   const input = el("input", { type: "text", value: task.title, maxLength: 200 });
@@ -195,18 +182,16 @@ taskForm.addEventListener("submit", async (e) => {
     await api("/api/tasks", { method: "POST", body: {
       title: taskTitle.value,
       priority: taskPriority.value,
-      category: taskCategoryInput.value.trim(),  
-      recur_days: Number.isInteger(recurVal) && recurVal >= 0 ? recurVal : 0, 
+      category: taskCategoryInput.value.trim(),
+      recur_days: Number.isInteger(recurVal) && recurVal >= 0 ? recurVal : 0,
     }});
     taskTitle.value = ""; taskCategoryInput.value = ""; taskRecurInput.value = "0";
     await loadTasks();
   } catch (err) { showError(err); }
 });
 
-
 taskFilterCat.addEventListener("change", loadTasks);
 taskFilterStatus.addEventListener("change", loadTasks);
-
 
 $("#task-export").addEventListener("click", () => {
   const rows = tasks.map((t) => ({
@@ -221,7 +206,7 @@ $("#task-export").addEventListener("click", () => {
   XLSX.writeFile(wb, "zadania.xlsx");
 });
 
-
+// === NOTATKI ===
 const noteSelect  = $("#note-select");
 const noteTitle   = $("#note-title");
 const noteContent = $("#note-content");
@@ -307,7 +292,7 @@ async function loadNotes() {
   showNote((notes.find((n) => n.id === saved) || notes[0]).id);
 }
 
-
+// === POMODORO ===
 const pomoTime  = $("#pomo-time");
 const pomoMode  = $("#pomo-mode");
 const pomoStart = $("#pomo-start");
@@ -316,14 +301,14 @@ const pomoBreak = $("#pomo-break");
 
 let pomo = { mode: "work", remaining: 25 * 60, running: false, endTime: 0, interval: null };
 
-const modeSeconds  = (mode) => (mode === "work" ? settings.pomodoro_work : settings.pomodoro_break) * 60;
-const formatTime   = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+const modeSeconds = (mode) => (mode === "work" ? settings.pomodoro_work : settings.pomodoro_break) * 60;
+const formatTime  = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
 function renderPomo() {
   pomoTime.textContent  = formatTime(pomo.remaining);
   pomoMode.textContent  = pomo.mode === "work" ? "Praca" : "Przerwa";
   pomoStart.textContent = pomo.running ? "Pauza" : "Start";
-  document.title = pomo.running ? `${formatTime(pomo.remaining)} – Personal Dashboard` : "Personal Dashboard";
+  document.title = pomo.running ? `${formatTime(pomo.remaining)} – Workspace` : "Workspace";
 }
 
 function stopTimer()  { clearInterval(pomo.interval); pomo.interval = null; pomo.running = false; }
@@ -335,7 +320,7 @@ function beep() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     osc.frequency.value = 880; osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.4);
-  } catch { /* brak dzwieku - nic nie szkodzi */ }
+  } catch { /* brak dzwieku */ }
 }
 
 async function tick() {
@@ -372,15 +357,15 @@ function renderPomoStats(stats) {
   $("#pomo-minutes").textContent = stats.total_minutes;
 }
 
-
-const boardViewport = $("#board-viewport");
-const boardWorld    = $("#board-world");
-const boardSvg      = $("#board-links");
-const boardStatus   = $("#board-status");
-const boardCount    = $("#board-count");
-const boardEmpty    = $("#board-empty");
-const boardHint     = $("#board-hint");
-const zoomLabel     = $("#board-zoom-label");
+// === TABLICA ===
+const boardViewport  = $("#board-viewport");
+const boardWorld     = $("#board-world");
+const boardSvg       = $("#board-links");
+const boardStatus    = $("#board-status");
+const boardCount     = $("#board-count");
+const boardEmpty     = $("#board-empty");
+const boardHint      = $("#board-hint");
+const zoomLabel      = $("#board-zoom-label");
 const boardDeleteBtn = $("#board-delete");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -405,7 +390,6 @@ const itemById = (id) => board.items.find((i) => i.id === id);
 const itemEl   = (id) => boardWorld.querySelector(`.b-item[data-id="${id}"]`);
 const clamp    = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-// ---- widok: przesuwanie i zoom ---------------------------------------------
 function applyView(persist = true) {
   boardWorld.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   const step = 24 * view.z;
@@ -437,7 +421,6 @@ function fitView() {
   applyView();
 }
 
-// ---- rysowanie elementów ----------------------------------------------------
 function buildItemEl(item) {
   const node = el("div", { "data-id": item.id });
   node.append(el("div", { className: "b-label" }), el("span", { className: "b-resize" }));
@@ -450,8 +433,8 @@ function paintItem(node, item) {
   const isSel = selected && selected.kind === "item" && selected.id === item.id;
   node.className = `b-item t-${item.type} c-${item.color}` + (isSel ? " selected" : "") + (linkSource === item.id ? " link-source" : "");
   Object.assign(node.style, { left: item.x + "px", top: item.y + "px", width: item.w + "px", height: item.h + "px", zIndex: item.z });
-  const label = node.querySelector(".b-label"); // brak w trakcie edycji (jest textarea)
-  if (label) label.textContent = item.text;     // textContent -> brak ryzyka XSS
+  const label = node.querySelector(".b-label");
+  if (label) label.textContent = item.text;
 }
 
 function renderBoard() {
@@ -473,9 +456,6 @@ function refreshSelection() {
 
 function select(sel) { selected = sel; refreshSelection(); }
 
-// ---- połączenia (strzałki w SVG) --------------------------------------------
-// Punkt, w którym półprosta ze środka elementu w stronę `target` przecina jego brzeg
-// (prostokąt albo elipsa). `gap` odsuwa punkt odrobinę na zewnątrz.
 function edgePoint(item, target, gap) {
   const cx = item.x + item.w / 2, cy = item.y + item.h / 2;
   const dx = target.x - cx, dy = target.y - cy;
@@ -484,8 +464,7 @@ function edgePoint(item, target, gap) {
   const t = item.type === "ellipse"
     ? 1 / Math.hypot(dx / (item.w / 2), dy / (item.h / 2))
     : Math.min(item.w / 2 / Math.abs(dx || 1e-9), item.h / 2 / Math.abs(dy || 1e-9));
-  const scale = t + gap / len;
-  return { x: cx + dx * scale, y: cy + dy * scale };
+  return { x: cx + dx * (t + gap / len), y: cy + dy * (t + gap / len) };
 }
 
 function svgEl(name, attrs) {
@@ -501,7 +480,6 @@ function drawLinks() {
     if (!a || !b) continue;
     const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
     const p1 = edgePoint(a, cb, 3), p2 = edgePoint(b, ca, 3);
-    // grot strzałki: trójkąt zakończony w punkcie p2
     const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x), L = 13, W = 6;
     const bx = p2.x - Math.cos(angle) * L, by = p2.y - Math.sin(angle) * L;
     const head = [`${p2.x},${p2.y}`, `${bx - Math.sin(angle)*W},${by + Math.cos(angle)*W}`, `${bx + Math.sin(angle)*W},${by - Math.cos(angle)*W}`].join(" ");
@@ -513,7 +491,6 @@ function drawLinks() {
   refreshSelection();
 }
 
-// ---- zapis do API -----------------------------------------------------------
 async function saveItem(id, patch) {
   boardStatus.textContent = "Zapisywanie…";
   try { await api(`/api/board/items/${id}`, { method: "PUT", body: patch }); boardStatus.textContent = "Zapisano " + new Date().toLocaleTimeString("pl-PL"); }
@@ -560,8 +537,6 @@ function bringToFront(item) {
   item.z = top + 1; paintItem(itemEl(item.id), item); saveItem(item.id, { z: item.z });
 }
 
-// ---- edycja tekstu w miejscu (textarea) --------------------------------------
-// Ctrl+Enter lub utrata fokusu = zapis, Escape = anuluj. Pusty element typu "tekst" znika.
 function startEdit(id) {
   const item = itemById(id), node = itemEl(id);
   if (!item || !node || editing !== null) return;
@@ -586,7 +561,6 @@ function startEdit(id) {
   area.addEventListener("blur", () => finish(true));
 }
 
-// ---- narzędzia i kolory -----------------------------------------------------
 function markLinkSource() {
   qAll(".b-item", boardWorld).forEach((node) => node.classList.toggle("link-source", linkSource === Number(node.dataset.id)));
 }
@@ -604,7 +578,6 @@ qAll(".swatch").forEach((btn) => {
   btn.addEventListener("click", () => {
     boardColor = btn.dataset.color;
     qAll(".swatch").forEach((s) => s.classList.toggle("active", s === btn));
-    // zaznaczony element (poza czystym tekstem) zmienia kolor od razu
     const item = selected && selected.kind === "item" ? itemById(selected.id) : null;
     if (item && item.type !== "text" && item.color !== boardColor) {
       item.color = boardColor; paintItem(itemEl(item.id), item); saveItem(item.id, { color: boardColor });
@@ -623,7 +596,6 @@ $("#board-clear").addEventListener("click", async () => {
   catch (err) { showError(err); }
 });
 
-// ---- obsługa myszy / dotyku (Pointer Events) ---------------------------------
 async function connectClick(id) {
   if (linkSource === null) { linkSource = id; markLinkSource(); return; }
   const from = linkSource; linkSource = null; markLinkSource();
@@ -638,7 +610,6 @@ function startPan(e) {
   boardViewport.setPointerCapture(e.pointerId);
 }
 
-// Obsługa kliknięcia na element w trybie "Zaznacz"
 function handleSelectPointerdown(e, itemNode, linkNode) {
   if (itemNode) {
     const item = itemById(Number(itemNode.dataset.id));
@@ -659,17 +630,17 @@ function handleSelectPointerdown(e, itemNode, linkNode) {
 }
 
 boardViewport.addEventListener("pointerdown", (e) => {
-  if (e.target.closest(".b-edit")) return;                              // klikanie w pole tekstowe
-  if (e.button === 1) { e.preventDefault(); startPan(e); return; }    // środkowy przycisk = przesuwanie
+  if (e.target.closest(".b-edit")) return;
+  if (e.button === 1) { e.preventDefault(); startPan(e); return; }
   if (e.button !== 0) return;
   boardViewport.focus({ preventScroll: true });
   const itemNode = e.target.closest(".b-item"), linkNode = e.target.closest(".b-link");
-  if (tool in ITEM_DEFAULTS) { createItem(tool, toWorld(e)); return; } // narzędzia tworzące element
+  if (tool in ITEM_DEFAULTS) { createItem(tool, toWorld(e)); return; }
   if (tool === "connect") {
     if (itemNode) connectClick(Number(itemNode.dataset.id)); else { linkSource = null; markLinkSource(); }
     return;
   }
-  handleSelectPointerdown(e, itemNode, linkNode);                       // narzędzie "Zaznacz"
+  handleSelectPointerdown(e, itemNode, linkNode);
 });
 
 boardViewport.addEventListener("pointermove", (e) => {
@@ -709,7 +680,6 @@ boardViewport.addEventListener("dblclick", (e) => {
   if (node && tool === "select") startEdit(Number(node.dataset.id));
 });
 
-// Ctrl + kółko (lub gest "szczypania" na gładziku) = zoom; zwykłe kółko przewija stronę
 boardViewport.addEventListener("wheel", (e) => {
   if (!e.ctrlKey) return;
   e.preventDefault();
@@ -718,7 +688,7 @@ boardViewport.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 boardViewport.addEventListener("keydown", (e) => {
-  if (e.target !== boardViewport) return;              // nie przechwytuj pisania w textarea
+  if (e.target !== boardViewport) return;
   if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelected(); }
   else if (e.key === "Escape") { setTool("select"); select(null); }
   else if (e.key === "Enter" && selected && selected.kind === "item") { e.preventDefault(); startEdit(selected.id); }
@@ -732,7 +702,7 @@ async function loadBoard() {
   applyView(false); setTool("select"); renderBoard();
 }
 
-
+// === START ===
 async function init() {
   try {
     settings = await api("/api/settings");
