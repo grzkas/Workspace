@@ -1,24 +1,41 @@
-async function api(url, {method = "GET", body,keepalive = false} = {}) {
-    const res = await fetch(url, {
-        method,
-        headers: {"Content-Type": "application/json"},
-        body: body === undefined ? undefined : JSON.stringify(body),
-        keepalive,
-    });
-    if (!res.ok) {
-        let message =`Błąd serwera (${res.status})`;
-        try { message = (await res.json()).error || message;} catch {/* brak JSON */}
-        throw new Error(message);   
-     }
-    return res.status === 204 ? null : res.json();
+
+
+"use strict";
+
+
+async function api(url, { method = "GET", body, keepalive = false } = {}) {
+  const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    keepalive,
+  });
+  if (!res.ok) {
+    let message = `Błąd serwera (${res.status})`;
+    try { message = (await res.json()).error || message; } catch { /* brak JSON */ }
+    throw new Error(message);
+  }
+  return res.status === 204 ? null : res.json();
 }
 
-function showError(err){
-    console.error(err);
-    alert(err.message || "Wystąpił błąd.");
+function showError(err) { console.error(err); alert(err.message || "Wystąpił błąd."); }
+
+const $ = (sel) => document.querySelector(sel);
+const qAll = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+// Helper tworzacy element DOM: el("div", { className, textContent, onClick, ... }, ...dzieci)
+function el(tag, attrs = {}, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) node.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === "className") node.className = v;
+    else if (k in node) node[k] = v;
+    else node.setAttribute(k, v);
+  }
+  node.append(...kids);
+  return node;
 }
 
-const $ = (sell) => document.querySelector(sel);
 
 let settings = null;
 const grid = $("#grid");
@@ -27,19 +44,11 @@ const themeSelect = $("#theme-select");
 function applyLayout() {
   document.documentElement.dataset.theme = settings.theme;
   themeSelect.value = settings.theme;
-
-  // kolejnosc: dopinamy kafelki do siatki w zapisanej kolejnosci
-  settings.layout.forEach((name) => {
-    grid.appendChild(grid.querySelector(`[data-tile="${name}"]`));
-  });
-
-  // widocznosc
-  grid.querySelectorAll(".tile").forEach((tile) => {
-    tile.classList.toggle("is-hidden", settings.hidden.includes(tile.dataset.tile));
-  });
-  document.querySelectorAll("[data-toggle]").forEach((box) => {
-    box.checked = !settings.hidden.includes(box.dataset.toggle);
-  });
+  settings.layout.forEach((name) => grid.appendChild(grid.querySelector(`[data-tile="${name}"]`)));
+  qAll(".tile", grid).forEach((tile) =>
+    tile.classList.toggle("is-hidden", settings.hidden.includes(tile.dataset.tile))
+  );
+  qAll("[data-toggle]").forEach((box) => { box.checked = !settings.hidden.includes(box.dataset.toggle); });
 }
 
 async function saveSettings(patch) {
@@ -47,31 +56,23 @@ async function saveSettings(patch) {
 }
 
 themeSelect.addEventListener("change", async () => {
-  try {
-    await saveSettings({ theme: themeSelect.value });
-    applyLayout();
-  } catch (err) { showError(err); }
+  try { await saveSettings({ theme: themeSelect.value }); applyLayout(); } catch (err) { showError(err); }
 });
 
-document.querySelectorAll("[data-toggle]").forEach((box) => {
+qAll("[data-toggle]").forEach((box) => {
   box.addEventListener("change", async () => {
-    const hidden = [...document.querySelectorAll("[data-toggle]")]
-      .filter((b) => !b.checked)
-      .map((b) => b.dataset.toggle);
-    try {
-      await saveSettings({ hidden });
-      applyLayout();
-    } catch (err) { showError(err); }
+    const hidden = qAll("[data-toggle]").filter((b) => !b.checked).map((b) => b.dataset.toggle);
+    try { await saveSettings({ hidden }); applyLayout(); } catch (err) { showError(err); }
   });
 });
 
+
 let draggedTile = null;
 
-grid.querySelectorAll(".tile").forEach((tile) => {
+qAll(".tile", grid).forEach((tile) => {
   const handle = tile.querySelector(".drag-handle");
-
   handle.addEventListener("mousedown", () => { tile.draggable = true; });
-  handle.addEventListener("mouseup", () => { tile.draggable = false; });
+  handle.addEventListener("mouseup",   () => { tile.draggable = false; });
 
   tile.addEventListener("dragstart", (e) => {
     draggedTile = tile;
@@ -79,50 +80,35 @@ grid.querySelectorAll(".tile").forEach((tile) => {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", tile.dataset.tile); // wymagane przez Firefox
   });
-
-  tile.addEventListener("dragover", (e) => {
-    if (!draggedTile || draggedTile === tile) return;
-    e.preventDefault(); // pozwala upuscic element
-    tile.classList.add("drag-over");
-  });
-
+  tile.addEventListener("dragover",  (e) => { if (!draggedTile || draggedTile === tile) return; e.preventDefault(); tile.classList.add("drag-over"); });
   tile.addEventListener("dragleave", () => tile.classList.remove("drag-over"));
-
   tile.addEventListener("drop", (e) => {
-    e.preventDefault();
-    tile.classList.remove("drag-over");
+    e.preventDefault(); tile.classList.remove("drag-over");
     if (!draggedTile || draggedTile === tile) return;
-
     const tiles = [...grid.children];
-    if (tiles.indexOf(draggedTile) < tiles.indexOf(tile)) {
-      tile.after(draggedTile);   // przeciagamy "w przod" -> wstaw za celem
-    } else {
-      tile.before(draggedTile);  // przeciagamy "w tyl" -> wstaw przed celem
-    }
+    tiles.indexOf(draggedTile) < tiles.indexOf(tile) ? tile.after(draggedTile) : tile.before(draggedTile);
   });
-
   tile.addEventListener("dragend", async () => {
     tile.draggable = false;
     tile.classList.remove("dragging");
-    grid.querySelectorAll(".drag-over").forEach((t) => t.classList.remove("drag-over"));
+    qAll(".drag-over", grid).forEach((t) => t.classList.remove("drag-over"));
     draggedTile = null;
-
-    const layout = [...grid.children].map((t) => t.dataset.tile);
-    try { await saveSettings({ layout }); } catch (err) { showError(err); }
+    try { await saveSettings({ layout: [...grid.children].map((t) => t.dataset.tile) }); } catch (err) { showError(err); }
   });
 });
+
 
 const taskForm        = $("#task-form");
 const taskTitle       = $("#task-title");
 const taskPriority    = $("#task-priority");
-const taskCategoryInput = $("#task-category");   //pole kategorii
-const taskRecurInput    = $("#task-recur");       //pole "powtórz co X dni"
+const taskCategoryInput = $("#task-category");   
+const taskRecurInput    = $("#task-recur");       
 const taskList        = $("#task-list");
 const tasksEmpty      = $("#tasks-empty");
 const tasksCount      = $("#tasks-count");
-const taskFilterCat    = $("#task-filter-cat");   //filtr po kategorii
-const taskFilterStatus = $("#task-filter-status"); //filtr po statusie
-const categoryDatalist = $("#category-list");      //<datalist> dla autocomplete
+const taskFilterCat    = $("#task-filter-cat");   
+const taskFilterStatus = $("#task-filter-status"); 
+const categoryDatalist = $("#category-list");      
 
 const PRIORITY_LABELS = { low: "Niski", medium: "Średni", high: "Wysoki" };
 let tasks = [];
@@ -187,6 +173,7 @@ function taskItem(task) {
   return el("li", { className: `task p-${task.priority}${task.done ? " done" : ""}` }, ...kids);
 }
 
+// edycja tytulu "w miejscu": Enter / utrata fokusu = zapis, Escape = anuluj
 function startEditTask(titleEl, task) {
   const input = el("input", { type: "text", value: task.title, maxLength: 200 });
   titleEl.replaceWith(input);
@@ -209,8 +196,8 @@ taskForm.addEventListener("submit", async (e) => {
     await api("/api/tasks", { method: "POST", body: {
       title: taskTitle.value,
       priority: taskPriority.value,
-      category: taskCategoryInput.value.trim(),  // [AI-GENERATED] NOWE: kategoria
-      recur_days: Number.isInteger(recurVal) && recurVal >= 0 ? recurVal : 0, // [AI-GENERATED] NOWE: powtarzanie
+      category: taskCategoryInput.value.trim(),  
+      recur_days: Number.isInteger(recurVal) && recurVal >= 0 ? recurVal : 0, 
     }});
     taskTitle.value = ""; taskCategoryInput.value = ""; taskRecurInput.value = "0";
     await loadTasks();
@@ -234,6 +221,7 @@ $("#task-export").addEventListener("click", () => {
   XLSX.utils.book_append_sheet(wb, ws, "Zadania");
   XLSX.writeFile(wb, "zadania.xlsx");
 });
+
 
 const noteSelect  = $("#note-select");
 const noteTitle   = $("#note-title");
@@ -320,6 +308,7 @@ async function loadNotes() {
   showNote((notes.find((n) => n.id === saved) || notes[0]).id);
 }
 
+
 const pomoTime  = $("#pomo-time");
 const pomoMode  = $("#pomo-mode");
 const pomoStart = $("#pomo-start");
@@ -384,6 +373,40 @@ function renderPomoStats(stats) {
   $("#pomo-minutes").textContent = stats.total_minutes;
 }
 
+
+const boardViewport = $("#board-viewport");
+const boardWorld    = $("#board-world");
+const boardSvg      = $("#board-links");
+const boardStatus   = $("#board-status");
+const boardCount    = $("#board-count");
+const boardEmpty    = $("#board-empty");
+const boardHint     = $("#board-hint");
+const zoomLabel     = $("#board-zoom-label");
+const boardDeleteBtn = $("#board-delete");
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const ITEM_DEFAULTS = { sticky: { w: 180, h: 160 }, text: { w: 220, h: 50 }, rect: { w: 200, h: 120 }, ellipse: { w: 200, h: 120 } };
+const MIN_W = 40, MIN_H = 30, MAX_W = 3000, MAX_H = 3000, COORD_LIMIT = 50000, MIN_ZOOM = 0.2, MAX_ZOOM = 3;
+const TOOL_HINTS = {
+  select:  "Przeciągnij tło, aby przesuwać widok • Ctrl + kółko = zoom • dwuklik = edycja tekstu",
+  sticky:  "Kliknij na tablicy, aby dodać karteczkę",
+  text:    "Kliknij na tablicy, aby dodać tekst",
+  rect:    "Kliknij na tablicy, aby dodać prostokąt",
+  ellipse: "Kliknij na tablicy, aby dodać elipsę",
+  connect: "Kliknij element początkowy, a potem docelowy (Esc = koniec)",
+};
+const TOOL_KEYS = { v: "select", n: "sticky", t: "text", r: "rect", e: "ellipse", c: "connect" };
+
+let board = { items: [], links: [] };
+let view  = { x: 40, y: 40, z: 1 };
+let tool  = "select", boardColor = "yellow";
+let selected = null, linkSource = null, interaction = null, editing = null;
+
+const itemById = (id) => board.items.find((i) => i.id === id);
+const itemEl   = (id) => boardWorld.querySelector(`.b-item[data-id="${id}"]`);
+const clamp    = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// ---- widok: przesuwanie i zoom ---------------------------------------------
 function applyView(persist = true) {
   boardWorld.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   const step = 24 * view.z;
@@ -451,6 +474,9 @@ function refreshSelection() {
 
 function select(sel) { selected = sel; refreshSelection(); }
 
+// ---- połączenia (strzałki w SVG) --------------------------------------------
+// Punkt, w którym półprosta ze środka elementu w stronę `target` przecina jego brzeg
+// (prostokąt albo elipsa). `gap` odsuwa punkt odrobinę na zewnątrz.
 function edgePoint(item, target, gap) {
   const cx = item.x + item.w / 2, cy = item.y + item.h / 2;
   const dx = target.x - cx, dy = target.y - cy;
@@ -597,3 +623,126 @@ $("#board-clear").addEventListener("click", async () => {
   try { await api("/api/board", { method: "DELETE" }); board = { items: [], links: [] }; selected = null; renderBoard(); refreshSelection(); }
   catch (err) { showError(err); }
 });
+
+// ---- obsługa myszy / dotyku (Pointer Events) ---------------------------------
+async function connectClick(id) {
+  if (linkSource === null) { linkSource = id; markLinkSource(); return; }
+  const from = linkSource; linkSource = null; markLinkSource();
+  if (from === id) return;
+  try { const link = await api("/api/board/links", { method: "POST", body: { from_id: from, to_id: id } }); board.links.push(link); drawLinks(); }
+  catch (err) { showError(err); }
+}
+
+function startPan(e) {
+  interaction = { type: "pan", startX: e.clientX, startY: e.clientY, origX: view.x, origY: view.y, moved: false };
+  boardViewport.classList.add("panning");
+  boardViewport.setPointerCapture(e.pointerId);
+}
+
+// Obsługa kliknięcia na element w trybie "Zaznacz"
+function handleSelectPointerdown(e, itemNode, linkNode) {
+  if (itemNode) {
+    const item = itemById(Number(itemNode.dataset.id));
+    if (!item) return;
+    select({ kind: "item", id: item.id });
+    bringToFront(item);
+    interaction = {
+      type: e.target.classList.contains("b-resize") ? "resize" : "move",
+      id: item.id, startX: e.clientX, startY: e.clientY,
+      origX: item.x, origY: item.y, origW: item.w, origH: item.h, moved: false,
+    };
+    boardViewport.setPointerCapture(e.pointerId);
+  } else if (linkNode) {
+    select({ kind: "link", id: Number(linkNode.dataset.id) });
+  } else {
+    select(null); startPan(e);
+  }
+}
+
+boardViewport.addEventListener("pointerdown", (e) => {
+  if (e.target.closest(".b-edit")) return;                              // klikanie w pole tekstowe
+  if (e.button === 1) { e.preventDefault(); startPan(e); return; }    // środkowy przycisk = przesuwanie
+  if (e.button !== 0) return;
+  boardViewport.focus({ preventScroll: true });
+  const itemNode = e.target.closest(".b-item"), linkNode = e.target.closest(".b-link");
+  if (tool in ITEM_DEFAULTS) { createItem(tool, toWorld(e)); return; } // narzędzia tworzące element
+  if (tool === "connect") {
+    if (itemNode) connectClick(Number(itemNode.dataset.id)); else { linkSource = null; markLinkSource(); }
+    return;
+  }
+  handleSelectPointerdown(e, itemNode, linkNode);                       // narzędzie "Zaznacz"
+});
+
+boardViewport.addEventListener("pointermove", (e) => {
+  if (!interaction) return;
+  const dx = e.clientX - interaction.startX, dy = e.clientY - interaction.startY;
+  if (Math.abs(dx) + Math.abs(dy) > 3) interaction.moved = true;
+  if (!interaction.moved) return;
+  if (interaction.type === "pan") { view.x = interaction.origX + dx; view.y = interaction.origY + dy; applyView(false); return; }
+  const item = itemById(interaction.id);
+  if (!item) return;
+  if (interaction.type === "move") {
+    item.x = Math.round(clamp(interaction.origX + dx / view.z, -COORD_LIMIT, COORD_LIMIT));
+    item.y = Math.round(clamp(interaction.origY + dy / view.z, -COORD_LIMIT, COORD_LIMIT));
+  } else {
+    item.w = Math.round(clamp(interaction.origW + dx / view.z, MIN_W, MAX_W));
+    item.h = Math.round(clamp(interaction.origH + dy / view.z, MIN_H, MAX_H));
+  }
+  paintItem(itemEl(item.id), item); drawLinks();
+});
+
+function endInteraction(e) {
+  if (!interaction) return;
+  const done = interaction; interaction = null;
+  boardViewport.classList.remove("panning");
+  if (boardViewport.hasPointerCapture(e.pointerId)) boardViewport.releasePointerCapture(e.pointerId);
+  if (!done.moved) return;
+  if (done.type === "pan") { applyView(); return; }
+  const item = itemById(done.id);
+  if (!item) return;
+  saveItem(item.id, done.type === "move" ? { x: item.x, y: item.y } : { w: item.w, h: item.h });
+}
+boardViewport.addEventListener("pointerup",     endInteraction);
+boardViewport.addEventListener("pointercancel", endInteraction);
+
+boardViewport.addEventListener("dblclick", (e) => {
+  const node = e.target.closest(".b-item");
+  if (node && tool === "select") startEdit(Number(node.dataset.id));
+});
+
+// Ctrl + kółko (lub gest "szczypania" na gładziku) = zoom; zwykłe kółko przewija stronę
+boardViewport.addEventListener("wheel", (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  const r = boardViewport.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+boardViewport.addEventListener("keydown", (e) => {
+  if (e.target !== boardViewport) return;              // nie przechwytuj pisania w textarea
+  if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelected(); }
+  else if (e.key === "Escape") { setTool("select"); select(null); }
+  else if (e.key === "Enter" && selected && selected.kind === "item") { e.preventDefault(); startEdit(selected.id); }
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) setTool(TOOL_KEYS[e.key.toLowerCase()]);
+});
+
+async function loadBoard() {
+  board = await api("/api/board");
+  try { const v = JSON.parse(localStorage.getItem("boardView")); if (v && [v.x, v.y, v.z].every(Number.isFinite)) view = { x: v.x, y: v.y, z: clamp(v.z, MIN_ZOOM, MAX_ZOOM) }; }
+  catch { /* ignoruj */ }
+  applyView(false); setTool("select"); renderBoard();
+}
+
+
+async function init() {
+  try {
+    settings = await api("/api/settings");
+    applyLayout();
+    pomoWork.value = settings.pomodoro_work; pomoBreak.value = settings.pomodoro_break;
+    setMode("work"); renderPomo();
+    const [, , stats] = await Promise.all([loadTasks(), loadNotes(), api("/api/pomodoro"), loadBoard()]);
+    renderPomoStats(stats);
+  } catch (err) { showError(err); }
+}
+
+init();

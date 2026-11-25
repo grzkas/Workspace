@@ -10,6 +10,7 @@ DB_PATH = os.path.join(BASE_DIR, "dashboard.db")
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
+#AI
 PRIORITIES = ("low", "medium", "high")
 THEMES = ("light", "dark", "ocean", "forest")
 TILES = ("tasks", "notes", "pomodoro")
@@ -543,7 +544,7 @@ def delete_board_link(link_id):
     db.commit()
     return ("", 204) if cur.rowcount else error("Nie znaleziono polaczenia.", 404)
 
-
+#AI
 init_db()
 if __name__ == "__main__":
     app.run(debug=True)
