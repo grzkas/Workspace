@@ -1,6 +1,6 @@
 import json
 import math
-import os 
+import os
 import sqlite3
 
 from flask import Flask, g, jsonify, request # type: ignore
@@ -25,7 +25,7 @@ BOARD_RANGES = {            # (min, max) dla pol liczbowych
 
 DEFAULT_SETTINGS = {
     "theme": "light",
-    "layout": list(TILES), 
+    "layout": list(TILES),
     "hidden": [],
     "pomodoro_work": 25,
     "pomodoro_break": 5,
@@ -37,13 +37,16 @@ CREATE TABLE IF NOT EXISTS tasks (
     title       TEXT    NOT NULL,
     priority    TEXT    NOT NULL DEFAULT 'medium',
     done        INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT    NOT NULL DEFAULT (datatime('now','localtime'))
+    category    TEXT    NOT NULL DEFAULT '',
+    recur_days  INTEGER NOT NULL DEFAULT 0,
+    next_due    TEXT,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS notes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    title       TEXT    NOT NULL 'Nowa notatka',
-    content     INTEGER NOT NULL DEFAULT '',
+    title       TEXT    NOT NULL DEFAULT 'Nowa notatka',
+    content     TEXT    NOT NULL DEFAULT '',
     updated_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -55,7 +58,25 @@ CREATE TABLE IF NOT EXISTS pomodoro_sessions (
 
 CREATE TABLE IF NOT EXISTS settings (
     key     TEXT PRIMARY KEY,
-    value   TEXT NOT NULL     
+    value   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS board_items (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    type  TEXT    NOT NULL,
+    x     REAL    NOT NULL DEFAULT 0,
+    y     REAL    NOT NULL DEFAULT 0,
+    w     REAL    NOT NULL DEFAULT 180,
+    h     REAL    NOT NULL DEFAULT 120,
+    text  TEXT    NOT NULL DEFAULT '',
+    color TEXT    NOT NULL DEFAULT 'yellow',
+    z     INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS board_links (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_id INTEGER NOT NULL REFERENCES board_items(id),
+    to_id   INTEGER NOT NULL REFERENCES board_items(id)
 );
 """
 
@@ -89,18 +110,8 @@ def init_db():
     db.commit()
     db.close()
 
-@app.get("/api/tasks/categories")
-def list_categories():
-    """Unikalne kategorie wsrod wszystkich zadan (niepuste)."""
-    rows = get_db().execute(
-        "SELECT DISTINCT category FROM tasks WHERE category != '' ORDER BY category COLLATE NOCASE"
-    ).fetchall()
-    return jsonify([r["category"] for r in rows])
-
-
 def error(message, status=400):
     return jsonify({"error": message}), status
-
 
 def clean_text(value, max_len):
     """Zwraca przyciety tekst lub None, jesli to nie string."""
@@ -108,29 +119,11 @@ def clean_text(value, max_len):
         return None
     return value.strip()[:max_len]
 
-def init_db():
-    db= sqlite3.connect(DB_PATH)
-    db.executescript(SCHEMA)
-    for key, value in DEFAULT_SETTINGS.items():
-        db.execute(
-            (key, json.dumps(value)),
-        )
-    db.commit()
-    db.close()
-
-def error(message, status=400):
-    return jsonify({"error": message}), status
-
-def clean_text(value, max_len) :
-    """Zwraca przyciety tekst lub None, jesli to nie string."""
-    if not isinstance(value, str):
-        return None
-    return value.strip() [:max_len]
-
-
 @app.get("/")
 def index():
     return app.send_static_file("index.html")
+
+# ===== Zadania =====
 
 def task_to_dict(row):
     return {
@@ -138,10 +131,9 @@ def task_to_dict(row):
         "title": row["title"],
         "priority": row["priority"],
         "done": bool(row["done"]),
-        "created_at": row["created_at"],
-        "category": row["category"] or "",   
-        "recur_days": row["recur_days"] or 0, 
-        "next_due": row["next_due"],           
+        "category": row["category"] or "",
+        "recur_days": row["recur_days"] or 0,
+        "next_due": row["next_due"],
         "created_at": row["created_at"],
     }
 
@@ -152,13 +144,20 @@ def _next_due(recur_days):
     import datetime
     return (datetime.date.today() + datetime.timedelta(days=recur_days)).isoformat()
 
+@app.get("/api/tasks/categories")
+def list_categories():
+    """Unikalne kategorie wsrod wszystkich zadan (niepuste)."""
+    rows = get_db().execute(
+        "SELECT DISTINCT category FROM tasks WHERE category != '' ORDER BY category COLLATE NOCASE"
+    ).fetchall()
+    return jsonify([r["category"] for r in rows])
 
 @app.get("/api/tasks")
 def list_tasks():
     """Lista zadan. Opcjonalnie ?status=active|done&category=X."""
     db = get_db()
     status = request.args.get("status")
-    category = request.args.get("category")  
+    category = request.args.get("category")
 
     db.execute(
         """UPDATE tasks SET done = 0, next_due = date(next_due, '+' || recur_days || ' days')
@@ -173,7 +172,6 @@ def list_tasks():
         conditions.append("done = 0")
     elif status == "done":
         conditions.append("done = 1")
-
     if category:
         conditions.append("category = ?")
         params.append(category)
@@ -217,16 +215,19 @@ def create_task():
 
 @app.put("/api/tasks/<int:task_id>")
 def update_task(task_id):
-    """Czesciowa aktualizacja: title, priority, done."""
+    """Czesciowa aktualizacja: title, priority, done, category, recur_days."""
     db = get_db()
     row = db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         return error("Nie znaleziono zadania.", 404)
 
     data = request.get_json(silent=True) or {}
-    title = row["title"]
-    priority = row["priority"]
-    done = row["done"]
+    title      = row["title"]
+    priority   = row["priority"]
+    done       = row["done"]
+    category   = row["category"] or ""
+    recur_days = row["recur_days"] or 0
+    next_due   = row["next_due"]
 
     if "title" in data:
         title = clean_text(data["title"], 200)
@@ -247,10 +248,10 @@ def update_task(task_id):
         if not isinstance(rd, int) or isinstance(rd, bool) or not 0 <= rd <= 3650:
             return error("'recur_days' musi byc liczba calkowita 0-3650.")
         recur_days = rd
-        next_due = _next_due(recur_days) if recur_days else None        
+        next_due = _next_due(recur_days) if recur_days else None
 
     db.execute(
-        "UPDATE tasks SET title = ?, priority = ?, done = ?, category = ?, recur_days = ?, next_due = ? WHERE id = ?",
+        "UPDATE tasks SET title=?, priority=?, done=?, category=?, recur_days=?, next_due=? WHERE id=?",
         (title, priority, done, category, recur_days, next_due, task_id),
     )
     db.commit()
@@ -263,9 +264,9 @@ def delete_task(task_id):
     db = get_db()
     cur = db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
     db.commit()
-    if cur.rowcount == 0:
-        return error("Nie znaleziono zadania.", 404)
-    return "", 204
+    return ("", 204) if cur.rowcount else error("Nie znaleziono zadania.", 404)
+
+# ===== Notatki =====
 
 def note_to_dict(row):
     return {
@@ -289,7 +290,6 @@ def create_note():
     content = data.get("content", "")
     if not isinstance(content, str):
         return error("Pole 'content' musi byc tekstem.")
-
     db = get_db()
     cur = db.execute(
         "INSERT INTO notes (title, content) VALUES (?, ?)", (title, content[:20000])
@@ -306,18 +306,20 @@ def update_note(note_id):
     if row is None:
         return error("Nie znaleziono notatki.", 404)
     data = request.get_json(silent=True) or {}
-    title   = clean_text(data["title"], 100) or "Bez tytulu" if "title" in data else row["title"]
+    title = clean_text(data["title"], 100) or "Bez tytulu" if "title" in data else row["title"]
     content = row["content"]
     if "content" in data:
-        if not isinstance(data["content"], str): return error("Pole 'content' musi byc tekstem.")
+        if not isinstance(data["content"], str):
+            return error("Pole 'content' musi byc tekstem.")
         content = data["content"][:20000]
     db.execute(
-        "UPDATE notes SET title=?,content=?,updated_at=datetime('now','localtime') WHERE id=?",
+        "UPDATE notes SET title=?, content=?, updated_at=datetime('now','localtime') WHERE id=?",
         (title, content, note_id),
     )
     db.commit()
     row = db.execute("SELECT * FROM notes WHERE id = ?", (note_id,)).fetchone()
     return jsonify(note_to_dict(row))
+
 
 @app.delete("/api/notes/<int:note_id>")
 def delete_note(note_id):
@@ -326,14 +328,15 @@ def delete_note(note_id):
     db.commit()
     return ("", 204) if cur.rowcount else error("Nie znaleziono notatki.", 404)
 
-# Pomodoro API
+# ===== Pomodoro =====
+
 @app.get("/api/pomodoro")
 def pomodoro_stats():
     db = get_db()
     q = db.execute
     return jsonify({
-        "today":        q("SELECT COUNT(*) AS c FROM pomodoro_sessions WHERE date(completed_at)=date('now','localtime')").fetchone()["c"],
-        "total":        q("SELECT COUNT(*) AS c FROM pomodoro_sessions").fetchone()["c"],
+        "today":         q("SELECT COUNT(*) AS c FROM pomodoro_sessions WHERE date(completed_at)=date('now','localtime')").fetchone()["c"],
+        "total":         q("SELECT COUNT(*) AS c FROM pomodoro_sessions").fetchone()["c"],
         "total_minutes": q("SELECT COALESCE(SUM(duration_min),0) AS m FROM pomodoro_sessions").fetchone()["m"],
     })
 
@@ -345,24 +348,21 @@ def pomodoro_add_session():
     duration = data.get("duration_min")
     if not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 180:
         return error("'duration_min' musi byc liczba calkowita 1-180.")
-
     db = get_db()
     db.execute("INSERT INTO pomodoro_sessions (duration_min) VALUES (?)", (duration,))
     db.commit()
     return pomodoro_stats(), 201
 
-    #Api Ustawienia
-    
+# ===== Ustawienia =====
+
 def read_settings():
     rows = get_db().execute("SELECT key, value FROM settings").fetchall()
     settings = dict(DEFAULT_SETTINGS)
     for r in rows:
         settings[r["key"]] = json.loads(r["value"])
-    # stara baza mogla zapisac uklad bez nowszych kafelkow - dopisz brakujace na koncu
     layout = [t for t in settings["layout"] if t in TILES]
     for i, tile in enumerate(TILES):
         if tile not in layout:
-            # wstaw przed pierwszym z kolejnych kafelkow, ktory juz jest w ukladzie
             later = [layout.index(t) for t in TILES[i + 1:] if t in layout]
             layout.insert(min(later) if later else len(layout), tile)
     settings["layout"] = layout
@@ -413,25 +413,16 @@ def update_settings():
     db.commit()
     return jsonify(read_settings())
 
-#Api tablica
+# ===== Tablica (whiteboard) =====
 
 def is_number(value):
-    """Skonczona liczba. JSON w Pythonie dopuszcza NaN/Infinity, a bool to int."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
-
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 def json_object():
-    """Cialo zapytania jako slownik (pusty, gdy to nie obiekt JSON)."""
     data = request.get_json(silent=True)
     return data if isinstance(data, dict) else {}
 
-
 def apply_item_fields(item, data):
-    """Naklada pola z `data` na slownik `item`. Zwraca komunikat bledu lub None."""
     for key, (low, high) in BOARD_RANGES.items():
         if key in data:
             value = data[key]
@@ -453,10 +444,8 @@ def apply_item_fields(item, data):
         item["z"] = z
     return None
 
-
 def board_item_to_dict(row):
     return {key: row[key] for key in ("id", "type", "x", "y", "w", "h", "text", "color", "z")}
-
 
 def board_link_to_dict(row):
     return {"id": row["id"], "from_id": row["from_id"], "to_id": row["to_id"]}
@@ -464,16 +453,13 @@ def board_link_to_dict(row):
 
 @app.get("/api/board")
 def get_board():
-    """Cala tablica naraz: elementy (wg warstw) i polaczenia."""
     db = get_db()
     items = db.execute("SELECT * FROM board_items ORDER BY z ASC, id ASC").fetchall()
     links = db.execute("SELECT * FROM board_links ORDER BY id ASC").fetchall()
-    return jsonify(
-        {
-            "items": [board_item_to_dict(r) for r in items],
-            "links": [board_link_to_dict(r) for r in links],
-        }
-    )
+    return jsonify({
+        "items": [board_item_to_dict(r) for r in items],
+        "links": [board_link_to_dict(r) for r in links],
+    })
 
 
 @app.delete("/api/board")
@@ -491,12 +477,10 @@ def create_board_item():
     item_type = data.get("type")
     if item_type not in BOARD_TYPES:
         return error("Typ musi byc jednym z: sticky, text, rect, ellipse.")
-
     item = {"x": 0, "y": 0, "w": 180, "h": 120, "text": "", "color": "yellow"}
     message = apply_item_fields(item, data)
     if message:
         return error(message)
-
     db = get_db()
     top = db.execute("SELECT COALESCE(MAX(z), 0) + 1 AS z FROM board_items").fetchone()["z"]
     cur = db.execute(
@@ -510,7 +494,6 @@ def create_board_item():
 
 @app.put("/api/board/items/<int:item_id>")
 def update_board_item(item_id):
-    """Czesciowa aktualizacja: x, y, w, h, text, color, z (typ sie nie zmienia)."""
     db = get_db()
     row = db.execute("SELECT * FROM board_items WHERE id = ?", (item_id,)).fetchone()
     if row is None: return error("Nie znaleziono elementu.", 404)
@@ -530,7 +513,7 @@ def delete_board_item(item_id):
     db = get_db()
     cur = db.execute("DELETE FROM board_items WHERE id = ?", (item_id,))
     if cur.rowcount == 0: return error("Nie znaleziono elementu.", 404)
-    db.execute("DELETE FROM board_links WHERE from_id=? OR to_id=?", (item_id, item_id))  # polaczenia z usunietym elementem nie maja sensu
+    db.execute("DELETE FROM board_links WHERE from_id=? OR to_id=?", (item_id, item_id))
     db.commit()
     return "", 204
 
@@ -561,8 +544,6 @@ def delete_board_link(link_id):
     return ("", 204) if cur.rowcount else error("Nie znaleziono polaczenia.", 404)
 
 
-
-#AI
 init_db()
 if __name__ == "__main__":
     app.run(debug=True)
